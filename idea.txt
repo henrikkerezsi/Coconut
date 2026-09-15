@@ -1,0 +1,344 @@
+# Coconut — Budget Tracking Application
+
+## 1. Purpose
+
+Coconut is a private, offline-first Android budget management application designed around
+a monthly spending allowance and a savings reserve.
+
+The application is intended for a single user and models the user's personal financial
+system. It is not a general-purpose banking or accounting application.
+
+There is no bank integration, backend, account system, cloud synchronization, advertising,
+analytics, or required internet connection. All financial data is stored locally on the
+device in a SQLite database.
+
+---
+
+## 2. Core Financial Model
+
+The application is organized around independent monthly accounting periods.
+
+Each month has:
+- A guaranteed monthly allowance.
+- Fixed expenses.
+- Estimated/variable fixed expenses.
+- Flexible spending budgets.
+- Actual transactions.
+- A calculated total monthly spending.
+- A calculated difference between actual spending and the monthly allowance.
+- A starting and ending savings-reserve value.
+
+The monthly allowance represents the amount of money reliably available for ordinary
+monthly spending. It is not a conventional spending budget and does not impose an
+artificial spending limit.
+
+The user's planned spending may therefore be greater than the monthly allowance.
+The application shows this clearly rather than treating it as an error.
+
+---
+
+## 3. Savings Reserve
+
+The application maintains a separate savings-reserve balance.
+
+The reserve is not treated as an ordinary spending account and does not contain individual
+bank transactions. It represents accumulated money available to compensate for months
+where spending exceeds the allowance, as well as accumulated savings from months where
+spending is below the allowance.
+
+At the end of each month:
+
+    actual monthly spending - monthly allowance = reserve adjustment
+
+The reserve is reduced when actual spending exceeds the allowance and increased when
+actual spending is below the allowance.
+
+The resulting reserve balance carries forward into subsequent months.
+
+Additional transfers from the reserve into the current month's available funds are
+supported and tracked separately from ordinary spending, so that transferring money does
+not incorrectly appear as an expense.
+
+---
+
+## 4. Fixed Expenses
+
+Users define recurring fixed expenses that automatically belong to each relevant month.
+
+Each fixed expense has:
+- Name.
+- Expected amount.
+- Recurrence/configuration.
+- Whether the amount is genuinely fixed or estimated/variable.
+- Current month's actual amount where applicable.
+
+Genuinely fixed expenses are automatically accounted for using their defined amount.
+
+Variable fixed expenses have an expected amount used for monthly planning. The expected
+amount can be determined manually or derived from historical actual amounts.
+
+Supported estimation strategies:
+- Manually specified amount.
+- Previous month's actual amount.
+- Average of a configurable number of previous months.
+- Historical average.
+
+When the actual bill becomes known, the user replaces/corrects the month's expected
+amount with the actual amount without creating a second expense.
+
+The application retains the distinction between expected and actual values so that
+historical statistics and future estimates use actual spending.
+
+---
+
+## 5. Flexible Spending Budgets
+
+Users define discretionary spending categories with monthly budget amounts.
+
+Budgets represent intended spending allocations, not hard restrictions.
+
+The sum of flexible budgets and fixed expenses may exceed the monthly allowance. This is
+intentional and supported naturally.
+
+For each budget:
+- Planned amount.
+- Actual amount spent.
+- Remaining amount.
+- Difference between planned and actual spending.
+
+Budgets are independently configurable and support being changed for individual months
+without unnecessarily changing historical months.
+
+---
+
+## 6. Transactions
+
+Actual discretionary spending is recorded as individual transactions.
+
+A transaction contains:
+- Unique identifier.
+- Date.
+- Amount.
+- Category/budget.
+- Merchant or description.
+- Optional note.
+
+Transactions are manually entered by the user.
+
+Entering a transaction assigned to a budget immediately updates the relevant budget's
+actual spending and the month's overall actual spending.
+
+Transaction entry is extremely fast and simple — this is a frequent operation.
+
+The system remembers previous merchant/category associations locally and suggests
+categories during future transaction entry. Suggestions remain editable and do not
+prevent choosing another category.
+
+---
+
+## 7. Monthly Accounting
+
+Each month distinguishes clearly between:
+- Allowance.
+- Planned spending.
+- Actual spending.
+- Remaining allowance.
+- Expected month-end spending.
+- Expected reserve adjustment.
+- Final reserve adjustment once the month is closed.
+
+The current month is the primary focus of the application.
+
+Previous months remain accessible for review and statistics but do not clutter the normal
+current-month interface.
+
+Months are independently preserved so that modifying a current configuration does not
+unexpectedly rewrite historical financial records.
+
+---
+
+## 8. Forecasting
+
+The application distinguishes actual financial results from planning/forecasting.
+
+Visible information:
+- How much has actually been spent so far.
+- How much remains in each budget.
+- What fixed expenses are expected.
+- What total spending is currently planned or forecast.
+- What reserve adjustment is currently expected.
+
+Forecasts are clearly presented as estimates and must not be confused with actual
+recorded spending.
+
+---
+
+## 9. Main Screens
+
+### Overview
+Primary screen for the current month. Shows:
+- Monthly allowance.
+- Actual total spending.
+- Remaining allowance.
+- Fixed-expense status.
+- Flexible-budget status.
+- Current savings reserve.
+- Current or projected reserve adjustment.
+- Important deviations between expected and actual spending.
+
+Prioritizes clarity over displaying every available piece of information.
+
+### Transactions
+Chronological list of actual transactions.
+- Adding, editing, deleting transactions.
+- Viewing transaction details.
+- Filtering/searching.
+- Identifying the associated budget/category.
+
+### Statistics
+Historical financial information and trends:
+- Monthly spending history.
+- Average monthly spending.
+- Spending by category.
+- Budget performance.
+- Fixed-expense history.
+- Savings-reserve development.
+- Historical differences between allowance and actual spending.
+
+Focused on useful personal budgeting information, not comprehensive financial analytics.
+
+### Settings / Planning
+Configuration for:
+- Monthly allowance.
+- Savings reserve.
+- Fixed expenses.
+- Variable fixed-expense estimation methods.
+- Flexible budgets.
+- Categories.
+- Data backup and restoration.
+- Application preferences.
+
+---
+
+## 10. Historical Months
+
+Previous months remain accessible.
+
+A historical month preserves:
+- Allowance.
+- Fixed-expense expectations and actuals.
+- Budget definitions and amounts.
+- Transactions.
+- Actual spending.
+- Final reserve adjustment.
+
+Historical data is immutable by normal changes to current configuration unless the user
+explicitly edits the historical month.
+
+---
+
+## 11. Data Storage
+
+Local structured SQLite database for reliable offline storage.
+
+The database separates persistent configuration from month-specific financial records.
+
+Capabilities:
+- Query current-month data.
+- Retrieve historical months.
+- Calculate budget totals.
+- Calculate monthly totals.
+- Calculate historical averages.
+- Update variable-expense estimates.
+- Recalculate reserve changes deterministically.
+
+Financial calculations are implemented as separate business logic, not embedded in UI
+components.
+
+---
+
+## 12. Backup and Restore
+
+All data is local, so the application provides a straightforward local backup mechanism.
+
+- Export complete application data to a portable file.
+- Import to restore all data.
+- Backup includes all information required to reconstruct financial history and
+  configuration.
+- No cloud service required.
+
+---
+
+## 13. Privacy
+
+- Works completely offline.
+- Stores financial information locally.
+- No network requests for normal operation.
+- No user account.
+- No analytics or tracking.
+- No advertising.
+- No bank credentials or banking integration.
+- Avoids unnecessary permissions.
+
+No financial information leaves the device.
+
+---
+
+## 14. Technical Stack
+
+- React Native (via Expo)
+- Expo SDK
+- TypeScript (strict mode)
+- expo-sqlite (local SQLite database)
+- Expo Router (navigation)
+- React Native Paper (Material Design 3 UI components)
+- dayjs (date handling)
+- Jest + jest-expo (unit testing)
+
+Architecture:
+- Business logic, database access, and UI have clear separation.
+- No unnecessary state-management frameworks, backend services, cloud infrastructure,
+  authentication, or architectural complexity.
+- Small dependency footprint.
+- Favor Expo-supported functionality.
+
+---
+
+## 15. Design Philosophy
+
+Focused personal tool, not a commercial banking application.
+
+Priorities:
+1. Extremely clear current-month overview.
+2. Fast manual transaction entry.
+3. Accurate and predictable calculations.
+4. Simple handling of recurring and variable fixed expenses.
+5. Clear separation between planned and actual spending.
+6. Easy understanding of the savings-reserve effect.
+7. Useful historical information without overwhelming the user.
+8. Complete offline functionality and strong privacy.
+9. Minimal unnecessary complexity.
+
+The user should be able to open the application and understand the current financial
+situation within a few seconds.
+
+---
+
+## 16. Project Structure
+
+    Coconut/
+    ├── idea.txt              This file
+    ├── AGENTS.md             AI agent coding conventions
+    ├── app.json              Expo configuration
+    ├── tsconfig.json         TypeScript configuration
+    ├── babel.config.js       Babel configuration
+    ├── package.json          Dependencies and scripts
+    ├── src/
+    │   ├── app/              Expo Router screens and layouts
+    │   ├── components/       Reusable UI components
+    │   ├── database/         Schema, migrations, queries
+    │   ├── models/           TypeScript types and interfaces
+    │   ├── services/         Business logic and calculations
+    │   └── utils/            Helper functions
+    ├── tests/                Unit tests
+    └── build/                Build outputs (APK)

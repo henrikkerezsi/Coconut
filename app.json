@@ -2,7 +2,7 @@
   "expo": {
     "name": "Coconut",
     "slug": "coconut",
-    "version": "1.0.0",
+    "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -18,7 +18,8 @@
       },
       "package": "com.coconut.app",
       "minSdkVersion": 29,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png"

@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Dialog, List, Portal, Text } from 'react-native-paper';
+import dayjs from 'dayjs';
 import { useAppData } from '../../data/DataProvider';
 import { formatCents } from '../../utils/currency';
 import { AmountInput } from '../../components/amount-input';
 import { CoconutLogo } from '../../components/coconut-logo';
 import { LoadingScreen } from '../../components/loading-screen';
 import { useAppTheme } from '../../theme';
+import { releaseInfo } from '../../config/release-info';
 
 const THEME_OPTIONS: { value: 'light' | 'dark' | 'system'; label: string }[] = [
   { value: 'system', label: 'System' },
@@ -39,6 +41,14 @@ export default function SettingsScreen() {
   }
 
   const symbol = settings.currencySymbol;
+  const builtVersion =
+    releaseInfo.releasedAt === ''
+      ? releaseInfo.version
+      : `${releaseInfo.version} (build ${releaseInfo.versionCode})`;
+  const releasedLabel =
+    releaseInfo.releasedAt === ''
+      ? 'Not yet released'
+      : dayjs(releaseInfo.releasedAt).format('D MMM YYYY, HH:mm');
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -110,8 +120,35 @@ export default function SettingsScreen() {
         />
       </List.Section>
 
+      <List.Section>
+        <List.Subheader>About</List.Subheader>
+        <List.Item
+          title="Coconut"
+          description="Budget management"
+          left={(props) => <List.Icon {...props} icon="wallet-outline" />}
+        />
+        <List.Item
+          title="Developer"
+          description="Henrik Kerezsi"
+          left={(props) => <List.Icon {...props} icon="account-outline" />}
+        />
+        <List.Item
+          title="Version"
+          description={builtVersion}
+          left={(props) => <List.Icon {...props} icon="tag-outline" />}
+        />
+        <List.Item
+          title="Released"
+          description={releasedLabel}
+          left={(props) => <List.Icon {...props} icon="clock-outline" />}
+        />
+      </List.Section>
+
       <Text variant="bodySmall" style={styles.about}>
-        Coconut keeps all data on this device only. No network, no account, no tracking.
+        Coconut is a private, offline-first budget app. Each month it compares your
+        allowance against planned fixed expenses and flexible budgets, and it tracks a
+        savings reserve. Everything stays on this device only — no network, no account,
+        no tracking.
       </Text>
       <View style={styles.aboutLogo}>
         <CoconutLogo size={36} />

@@ -66,8 +66,28 @@ git push origin HEAD
 git push origin "$TAG"
 
 # --- Local release APK build ---
+SDK_ROOT="${ANDROID_HOME:-$HOME/Android/Sdk}"
 export ANDROID_HOME="$SDK_ROOT"
 export CI=1
+
+# Ensure Gradle uses the full JDK (not just JRE) for toolchain detection.
+JAVA_HOME_DIR=""
+for candidate in \
+  "$HOME/.sdkman/candidates/java/current" \
+  "/usr/lib/jvm/java-21-openjdk" \
+  "/usr/lib/jvm/java-17-openjdk" \
+  "$JAVA_HOME"; do
+  if [[ -x "$candidate/bin/javac" ]]; then
+    JAVA_HOME_DIR="$candidate"
+    break
+  fi
+done
+if [[ -z "$JAVA_HOME_DIR" ]]; then
+  echo "Could not find a JDK with javac. Install a JDK and ensure JAVA_HOME is set." >&2
+  exit 1
+fi
+export JAVA_HOME="$JAVA_HOME_DIR"
+echo "  JAVA_HOME=$JAVA_HOME"
 
 echo "Generating the native Android project..."
 npx expo prebuild --platform android --no-install --clean
@@ -75,7 +95,7 @@ npx expo prebuild --platform android --no-install --clean
 git restore package.json
 
 echo "Building the release APK (this can take a while on the first run)..."
-(cd android && ./gradlew assembleRelease)
+(cd android && ./gradlew assembleRelease --no-daemon)
 
 APK="android/app/build/outputs/apk/release/app-release.apk"
 if [[ ! -f "$APK" ]]; then

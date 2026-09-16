@@ -76,7 +76,7 @@ for candidate in \
   "$HOME/.sdkman/candidates/java/current" \
   "/usr/lib/jvm/java-21-openjdk" \
   "/usr/lib/jvm/java-17-openjdk" \
-  "$JAVA_HOME"; do
+  "${JAVA_HOME:-}"; do
   if [[ -x "$candidate/bin/javac" ]]; then
     JAVA_HOME_DIR="$candidate"
     break

@@ -15,12 +15,16 @@ export function getDatabase(): Promise<SQLiteDatabase> {
   return dbPromise;
 }
 
-export async function resetDatabase(): Promise<void> {
+export async function closeDatabase(): Promise<void> {
   if (dbPromise) {
     const db = await dbPromise;
     await db.closeAsync();
     dbPromise = null;
   }
+}
+
+export async function resetDatabase(): Promise<void> {
+  await closeDatabase();
   dbPromise = getDatabase();
   await dbPromise;
 }

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
-import { Button, Card, Dialog, List, Portal, Snackbar, Text as PaperText } from 'react-native-paper';
+import { Button, Card, List, Portal, Snackbar, Text as PaperText } from 'react-native-paper';
 import { useAppData } from '../../data/DataProvider';
 import { LoadingScreen } from '../../components/loading-screen';
 import { shareBackup, pickBackupFile, restoreFromBackup } from '../../utils/backup';
+import { AppDialog } from '../../components/app-dialog';
 
 export default function BackupScreen() {
   const { ready, refresh } = useAppData();
@@ -82,15 +83,15 @@ export default function BackupScreen() {
       </Card>
 
       <Portal>
-        <Dialog visible={confirmUri !== null} onDismiss={() => setConfirmUri(null)}>
-          <Dialog.Title>Replace current data?</Dialog.Title>
-          <Dialog.Content>
+        <AppDialog visible={confirmUri !== null} onDismiss={() => setConfirmUri(null)}>
+          <AppDialog.Title>Replace current data?</AppDialog.Title>
+          <AppDialog.Content>
             <PaperText variant="bodyMedium">
               All current transactions, months and settings will be replaced with the contents of the
               backup.
             </PaperText>
-          </Dialog.Content>
-          <Dialog.Actions>
+          </AppDialog.Content>
+          <AppDialog.Actions>
             <Button onPress={() => setConfirmUri(null)}>Cancel</Button>
             <Button
               loading={busy}
@@ -114,8 +115,8 @@ export default function BackupScreen() {
             >
               Restore
             </Button>
-          </Dialog.Actions>
-        </Dialog>
+          </AppDialog.Actions>
+        </AppDialog>
       </Portal>
 
       <List.Item

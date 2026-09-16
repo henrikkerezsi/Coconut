@@ -9,6 +9,9 @@ import { StatCard, type Tone } from '../../components/stat-card';
 import { LoadingScreen } from '../../components/loading-screen';
 import { CoconutLogo } from '../../components/coconut-logo';
 import { useAppTheme } from '../../theme';
+import { ScreenFade } from '../../components/screen-fade';
+import { FadeIn } from '../../components/fade-in';
+import { AnimatedNumber } from '../../components/animated-number';
 
 export default function OverviewScreen() {
   const { ready, settings, recentTransactions, currentDashboard, currentMonth } = useAppData();
@@ -32,8 +35,9 @@ export default function OverviewScreen() {
     reserveProjection.adjustmentCents > 0 ? 'bad' : reserveProjection.adjustmentCents < 0 ? 'good' : 'neutral';
 
   return (
-    <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.container}>
+    <ScreenFade>
+      <View style={styles.screen}>
+        <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.brandRow}>
         <CoconutLogo size={28} />
         <Text
@@ -51,10 +55,8 @@ export default function OverviewScreen() {
         <Card.Title
           title="Savings Reserve"
           subtitle={reserved ? 'Month closed' : 'Projected month end'}
-          right={(props) => (
-            <Text variant="titleLarge" style={styles.reserveValue}>
-              {formatCents(reserveProjection.endingReserveCents, symbol)}
-            </Text>
+          right={() => (
+            <AnimatedNumber value={reserveProjection.endingReserveCents} format={(v) => formatCents(v, symbol)} style={styles.reserveValue} />
           )}
         />
         <Card.Content>
@@ -73,9 +75,9 @@ export default function OverviewScreen() {
       </Card>
 
       <View style={styles.statRow}>
-        <StatCard label="Allowance" value={formatCents(forecast.allowanceCents, symbol)} />
-        <StatCard label="Actual spent" value={formatCents(forecast.actualSpendingCents, symbol)} />
-        <StatCard label="Remaining" value={formatCents(remaining, symbol)} tone={remainingTone} sub={remaining < 0 ? 'Over the allowance' : null} />
+        <StatCard label="Allowance" value={forecast.allowanceCents} format={(v) => formatCents(v, symbol)} />
+        <StatCard label="Actual spent" value={forecast.actualSpendingCents} format={(v) => formatCents(v, symbol)} />
+        <StatCard label="Remaining" value={remaining} format={(v) => formatCents(v, symbol)} tone={remainingTone} sub={remaining < 0 ? 'Over the allowance' : null} />
       </View>
 
       <Card mode="elevated" style={styles.card} contentStyle={styles.cardContent}>
@@ -177,8 +179,8 @@ export default function OverviewScreen() {
             recentTransactions.map((tx) => {
               const budgetName = currentDashboard?.budgetNames.get(tx.budgetId ?? -1);
               return (
+                <FadeIn key={tx.id}>
                 <List.Item
-                  key={tx.id}
                   title={tx.merchant}
                   description={relativeDayLabel(tx.date)}
                   left={(props) => <List.Icon {...props} icon="cash" />}
@@ -192,8 +194,10 @@ export default function OverviewScreen() {
                       ) : null}
                     </View>
                   )}
+                  style={[styles.transactionRow, { borderRadius: theme.radii.medium }]}
                   onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: String(tx.id) } })}
                 />
+              </FadeIn>
               );
             })
           )}
@@ -201,7 +205,8 @@ export default function OverviewScreen() {
       </Card>
       </ScrollView>
       <FAB icon="plus" style={styles.fab} onPress={() => router.push('/transaction/new')} />
-    </View>
+      </View>
+    </ScreenFade>
   );
 }
 
@@ -272,6 +277,9 @@ const styles = StyleSheet.create({
   },
   transactionRight: {
     alignItems: 'flex-end',
+  },
+  transactionRow: {
+    overflow: 'hidden',
   },
   budgetTag: {
     opacity: 0.6,

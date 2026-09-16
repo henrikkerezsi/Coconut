@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
-import { FAB, List, Portal, Dialog, Text as PaperText, IconButton } from 'react-native-paper';
+import { FAB, List, Portal, Text as PaperText, IconButton } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useAppData } from '../../data/DataProvider';
 import { formatCents } from '../../utils/currency';
 import { LoadingScreen } from '../../components/loading-screen';
 import { AmountInput } from '../../components/amount-input';
+import { AppDialog } from '../../components/app-dialog';
 import type { BudgetWithStatus } from '../../data/DataProvider';
 import { useAppTheme } from '../../theme';
+import { FadeIn } from '../../components/fade-in';
 
 export default function BudgetsScreen() {
   const router = useRouter();
@@ -44,21 +46,22 @@ export default function BudgetsScreen() {
           <>
             <List.Subheader>Planned this month</List.Subheader>
             {statuses.map((status) => (
-              <List.Item
-                key={status.monthBudgetId}
-                title={status.budget.name}
-                description={`${formatCents(status.status.spentCents, symbol)} spent`}
-                right={(props) => (
-                  <PaperText {...props} style={styles.rowRight}>
-                    {formatCents(status.plannedCents, symbol)}
-                  </PaperText>
-                )}
-                onPress={() => {
-                  setPlannedDraft(status.plannedCents);
-                  setPlannedError(null);
-                  setPlanned(status);
-                }}
-              />
+              <FadeIn key={status.monthBudgetId}>
+                <List.Item
+                  title={status.budget.name}
+                  description={`${formatCents(status.status.spentCents, symbol)} spent`}
+                  right={(props) => (
+                    <PaperText {...props} style={styles.rowRight}>
+                      {formatCents(status.plannedCents, symbol)}
+                    </PaperText>
+                  )}
+                  onPress={() => {
+                    setPlannedDraft(status.plannedCents);
+                    setPlannedError(null);
+                    setPlanned(status);
+                  }}
+                />
+              </FadeIn>
             ))}
             {statuses.length === 0 && (
               <PaperText variant="bodyMedium" style={styles.empty}>
@@ -71,17 +74,19 @@ export default function BudgetsScreen() {
         data={budgets}
         keyExtractor={(item) => String(item.id)}
         renderItem={({ item }) => (
-          <List.Item
-            title={item.name}
-            description={`Default: ${formatCents(item.defaultAmountCents, symbol)}`}
-            right={(props) => (
-              <View {...props} style={styles.rowActions}>
-                <IconButton icon="pencil-outline" onPress={() => router.push(`/budget/${item.id}`)} />
-                <IconButton icon="delete-outline" onPress={() => setDeleteId(item.id)} />
-              </View>
-            )}
-            onPress={() => router.push(`/budget/${item.id}`)}
-          />
+          <FadeIn>
+            <List.Item
+              title={item.name}
+              description={`Default: ${formatCents(item.defaultAmountCents, symbol)}`}
+              right={(props) => (
+                <View {...props} style={styles.rowActions}>
+                  <IconButton icon="pencil-outline" onPress={() => router.push(`/budget/${item.id}`)} />
+                  <IconButton icon="delete-outline" onPress={() => setDeleteId(item.id)} />
+                </View>
+              )}
+              onPress={() => router.push(`/budget/${item.id}`)}
+            />
+          </FadeIn>
         )}
         contentContainerStyle={styles.content}
         ListEmptyComponent={
@@ -92,9 +97,9 @@ export default function BudgetsScreen() {
       />
       {planned !== null && (
         <Portal>
-          <Dialog visible onDismiss={() => setPlanned(null)}>
-            <Dialog.Title>Planned this month</Dialog.Title>
-            <Dialog.Content>
+          <AppDialog visible onDismiss={() => setPlanned(null)}>
+            <AppDialog.Title>Planned this month</AppDialog.Title>
+            <AppDialog.Content>
               <AmountInput
                 label={planned.budget.name}
                 value={plannedDraft}
@@ -105,8 +110,8 @@ export default function BudgetsScreen() {
               <PaperText variant="bodySmall" style={styles.dialogHint}>
                 Only affects the current month.
               </PaperText>
-            </Dialog.Content>
-            <Dialog.Actions>
+            </AppDialog.Content>
+            <AppDialog.Actions>
               <List.Item title="Cancel" onPress={() => setPlanned(null)} />
               <List.Item
                 title="Save"
@@ -127,20 +132,20 @@ export default function BudgetsScreen() {
                 }}
                 disabled={saving}
               />
-            </Dialog.Actions>
-          </Dialog>
+            </AppDialog.Actions>
+          </AppDialog>
         </Portal>
       )}
       {deleteId !== null && (
         <Portal>
-          <Dialog visible onDismiss={() => setDeleteId(null)}>
-            <Dialog.Title>Delete budget?</Dialog.Title>
-            <Dialog.Content>
+          <AppDialog visible onDismiss={() => setDeleteId(null)}>
+            <AppDialog.Title>Delete budget?</AppDialog.Title>
+            <AppDialog.Content>
               <PaperText variant="bodyMedium">
                 Transactions already tagged with this budget keep their tags. Past months keep their records.
               </PaperText>
-            </Dialog.Content>
-            <Dialog.Actions>
+            </AppDialog.Content>
+            <AppDialog.Actions>
               <List.Item title="Cancel" onPress={() => setDeleteId(null)} />
               <List.Item
                 title="Delete"
@@ -153,8 +158,8 @@ export default function BudgetsScreen() {
                   setDeleteId(null);
                 }}
               />
-            </Dialog.Actions>
-          </Dialog>
+            </AppDialog.Actions>
+          </AppDialog>
         </Portal>
       )}
       <FAB

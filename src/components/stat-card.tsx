@@ -2,17 +2,19 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { Card, Text } from 'react-native-paper';
 import { useAppTheme } from '../theme';
+import { AnimatedNumber } from './animated-number';
 
 export type Tone = 'neutral' | 'good' | 'bad' | 'attention';
 
 interface StatCardProps {
   label: string;
-  value: string;
+  value: number | null;
+  format: (value: number) => string;
   sub?: string | null;
   tone?: Tone;
 }
 
-export function StatCard({ label, value, sub, tone = 'neutral' }: StatCardProps) {
+export function StatCard({ label, value, format, sub, tone = 'neutral' }: StatCardProps) {
   const theme = useAppTheme();
   const TONE_COLORS: Record<Tone, string> = {
     neutral: theme.colors.onSurfaceVariant,
@@ -27,9 +29,17 @@ export function StatCard({ label, value, sub, tone = 'neutral' }: StatCardProps)
         <Text variant="labelMedium" style={styles.label}>
           {label}
         </Text>
-        <Text variant="headlineSmall" style={{ color }}>
-          {value}
-        </Text>
+        {value === null ? (
+          <Text variant="headlineSmall" style={{ color }}>
+            —
+          </Text>
+        ) : (
+          <AnimatedNumber
+            value={value}
+            format={format}
+            style={[styles.value, { color }]}
+          />
+        )}
         {sub ? (
           <Text variant="bodySmall" style={styles.sub}>
             {sub}
@@ -51,6 +61,10 @@ const styles = StyleSheet.create({
   label: {
     opacity: 0.7,
     marginBottom: 2,
+  },
+  value: {
+    fontSize: 28,
+    lineHeight: 36,
   },
   sub: {
     opacity: 0.6,

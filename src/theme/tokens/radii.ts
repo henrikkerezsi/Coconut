@@ -3,6 +3,7 @@ export interface RadiiScale {
   readonly medium: number;
   readonly large: number;
   readonly xl: number;
+  readonly dialog: number;
   readonly pill: number;
 }
 
@@ -11,5 +12,6 @@ export const radii: RadiiScale = {
   medium: 10,
   large: 14,
   xl: 18,
+  dialog: 20,
   pill: 999,
 };

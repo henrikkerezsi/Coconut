@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
-import { FAB, List, Portal, Dialog, Text as PaperText, Divider, IconButton } from 'react-native-paper';
+import { FAB, List, Portal, Text as PaperText, Divider, IconButton } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useAppData } from '../../data/DataProvider';
 import { formatCents } from '../../utils/currency';
 import { shortMonthLabel } from '../../utils/date';
 import { LoadingScreen } from '../../components/loading-screen';
 import { AmountInput } from '../../components/amount-input';
+import { AppDialog } from '../../components/app-dialog';
 import { useAppTheme } from '../../theme';
+import { FadeIn } from '../../components/fade-in';
 
 export default function FixedExpensesScreen() {
   const router = useRouter();
@@ -49,23 +51,24 @@ export default function FixedExpensesScreen() {
               />
             </View>
             {statuses.map((status) => (
-              <List.Item
-                key={status.instance.id}
-                title={status.expense?.name ?? 'Removed expense'}
-                description={`Planned: ${formatCents(status.instance.expectedAmountCents, symbol)}`}
-                right={(props) => (
-                  <PaperText {...props} style={styles.rowRight}>
-                    {status.instance.actualAmountCents === null
-                      ? formatCents(status.instance.expectedAmountCents, symbol)
-                      : formatCents(status.instance.actualAmountCents, symbol)}
-                  </PaperText>
-                )}
-                onPress={() => {
-                  setActualDraft(status.instance.actualAmountCents);
-                  setActualError(null);
-                  setActualId(status.instance.id);
-                }}
-              />
+              <FadeIn key={status.instance.id}>
+                <List.Item
+                  title={status.expense?.name ?? 'Removed expense'}
+                  description={`Planned: ${formatCents(status.instance.expectedAmountCents, symbol)}`}
+                  right={(props) => (
+                    <PaperText {...props} style={styles.rowRight}>
+                      {status.instance.actualAmountCents === null
+                        ? formatCents(status.instance.expectedAmountCents, symbol)
+                        : formatCents(status.instance.actualAmountCents, symbol)}
+                    </PaperText>
+                  )}
+                  onPress={() => {
+                    setActualDraft(status.instance.actualAmountCents);
+                    setActualError(null);
+                    setActualId(status.instance.id);
+                  }}
+                />
+              </FadeIn>
             ))}
             {statuses.length > 0 && <Divider />}
             <List.Subheader>Definitions</List.Subheader>
@@ -74,23 +77,25 @@ export default function FixedExpensesScreen() {
         data={allFixedExpenses}
         keyExtractor={(item) => String(item.id)}
         renderItem={({ item }) => (
-          <List.Item
-            title={item.name}
-            titleNumberOfLines={1}
-            description={
-              item.kind === 'fixed'
-                ? `${formatCents(item.expectedAmountCents, symbol)} · fixed`
-                : `${formatCents(item.expectedAmountCents, symbol)} · estimated from ${item.estimationStrategy.replace('-', ' ')}`
-            }
-            descriptionNumberOfLines={2}
-            right={(props) => (
-              <View {...props} style={styles.rowActions}>
-                <IconButton icon="pencil-outline" onPress={() => router.push(`/fixed-expense/${item.id}`)} />
-                <IconButton icon="delete-outline" onPress={() => setDeleteId(item.id)} />
-              </View>
-            )}
-            onPress={() => router.push(`/fixed-expense/${item.id}`)}
-          />
+          <FadeIn>
+            <List.Item
+              title={item.name}
+              titleNumberOfLines={1}
+              description={
+                item.kind === 'fixed'
+                  ? `${formatCents(item.expectedAmountCents, symbol)} · fixed`
+                  : `${formatCents(item.expectedAmountCents, symbol)} · estimated from ${item.estimationStrategy.replace('-', ' ')}`
+              }
+              descriptionNumberOfLines={2}
+              right={(props) => (
+                <View {...props} style={styles.rowActions}>
+                  <IconButton icon="pencil-outline" onPress={() => router.push(`/fixed-expense/${item.id}`)} />
+                  <IconButton icon="delete-outline" onPress={() => setDeleteId(item.id)} />
+                </View>
+              )}
+              onPress={() => router.push(`/fixed-expense/${item.id}`)}
+            />
+          </FadeIn>
         )}
         contentContainerStyle={styles.content}
         ListEmptyComponent={
@@ -101,9 +106,9 @@ export default function FixedExpensesScreen() {
       />
       {statuses.length > 0 && (
         <Portal>
-          <Dialog visible={actualId !== null} onDismiss={() => setActualId(null)}>
-            <Dialog.Title>Actual charge</Dialog.Title>
-            <Dialog.Content>
+          <AppDialog visible={actualId !== null} onDismiss={() => setActualId(null)}>
+            <AppDialog.Title>Actual charge</AppDialog.Title>
+            <AppDialog.Content>
               <AmountInput
                 label={targeted?.expense?.name ?? 'Amount'}
                 value={actualDraft}
@@ -114,8 +119,8 @@ export default function FixedExpensesScreen() {
               <PaperText variant="bodySmall" style={styles.dialogHint}>
                 Leave empty to keep the planned estimate for {targeted ? shortMonthLabel(targeted.instance.monthKey) : 'this month'}.
               </PaperText>
-            </Dialog.Content>
-            <Dialog.Actions>
+            </AppDialog.Content>
+            <AppDialog.Actions>
               <List.Item title="Cancel" onPress={() => setActualId(null)} />
               <List.Item
                 title="Save"
@@ -137,20 +142,20 @@ export default function FixedExpensesScreen() {
                 }}
                 disabled={saving}
               />
-            </Dialog.Actions>
-          </Dialog>
+            </AppDialog.Actions>
+          </AppDialog>
         </Portal>
       )}
       {deleteId !== null && (
         <Portal>
-          <Dialog visible onDismiss={() => setDeleteId(null)}>
-            <Dialog.Title>Delete fixed expense?</Dialog.Title>
-            <Dialog.Content>
+          <AppDialog visible onDismiss={() => setDeleteId(null)}>
+            <AppDialog.Title>Delete fixed expense?</AppDialog.Title>
+            <AppDialog.Content>
               <PaperText variant="bodyMedium">
                 This removes the definition and its current-month instance. Past months keep their records.
               </PaperText>
-            </Dialog.Content>
-            <Dialog.Actions>
+            </AppDialog.Content>
+            <AppDialog.Actions>
               <List.Item title="Cancel" onPress={() => setDeleteId(null)} />
               <List.Item
                 title="Delete"
@@ -163,8 +168,8 @@ export default function FixedExpensesScreen() {
                   setDeleteId(null);
                 }}
               />
-            </Dialog.Actions>
-          </Dialog>
+            </AppDialog.Actions>
+          </AppDialog>
         </Portal>
       )}
       <FAB

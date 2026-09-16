@@ -1,7 +1,7 @@
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import dayjs from 'dayjs';
-import { getDatabase, resetDatabase } from '../database/database';
+import { getDatabase, closeDatabase, resetDatabase } from '../database/database';
 import { BACKUP_EXTENSION } from './date';
 
 export const BACKUP_MIME_TYPE = 'application/x-sqlite3';
@@ -33,6 +33,23 @@ export async function shareBackup(): Promise<boolean> {
 }
 
 /**
+ * Removes stale SQLite sidecar files (WAL/SHM/journal) so a restored database
+ * is reopened cleanly. Leftover sidecar files from a previous session can
+ * otherwise make SQLite report the restored database as malformed.
+ */
+function removeSidecarSuffixes(databasePath: string): void {
+  const file = new File(databasePath);
+  const directory = file.parentDirectory;
+  const name = file.name;
+  for (const suffix of ['-wal', '-shm', '-journal']) {
+    const sidecar = new File(directory, `${name}${suffix}`);
+    if (sidecar.exists) {
+      sidecar.delete();
+    }
+  }
+}
+
+/**
  * Replaces the app database with the given backup file content.
  * The app database is closed first, the file is overwritten, and the
  * database connection is reopened.
@@ -42,9 +59,12 @@ export async function restoreFromBackup(fileUri: string): Promise<void> {
   const bytes = await source.bytes();
 
   const db = await getDatabase();
-  await db.closeAsync();
+  const databasePath = db.databasePath;
+  await closeDatabase();
 
-  const target = new File(db.databasePath);
+  removeSidecarSuffixes(databasePath);
+
+  const target = new File(databasePath);
   target.create({ intermediates: true, overwrite: true });
   target.write(bytes);
 

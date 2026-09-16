@@ -32,17 +32,17 @@ function TabItem({
 
   return (
     <Pressable onPress={onPress} onLongPress={onLongPress} style={styles.tabItem}>
-      <View
-        style={[
-          styles.tabIndicator,
-          {
-            backgroundColor: isFocused ? theme.colors.primaryContainer : 'transparent',
-            borderRadius: theme.radii.pill,
-            paddingHorizontal: theme.spacing[4],
-            paddingVertical: theme.spacing[1],
-          },
-        ]}
-      >
+<View
+          style={[
+            styles.tabIndicator,
+            {
+              backgroundColor: isFocused ? theme.colors.primaryContainer : 'transparent',
+              borderRadius: theme.radii.xl,
+              paddingHorizontal: theme.spacing[4],
+              paddingVertical: theme.spacing[1],
+            },
+          ]}
+        >
         <MaterialCommunityIcons name={icon} color={color} size={24} />
       </View>
       <Text variant="labelSmall" style={[styles.tabLabel, { color }]} numberOfLines={1}>
@@ -117,6 +117,7 @@ const styles = StyleSheet.create({
   tabIndicator: {
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   tabLabel: {
     marginTop: 2,

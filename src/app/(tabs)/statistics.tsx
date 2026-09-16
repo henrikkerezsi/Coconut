@@ -18,6 +18,8 @@ import { shortMonthLabel } from '../../utils/date';
 import { StatCard } from '../../components/stat-card';
 import { LoadingScreen } from '../../components/loading-screen';
 import { useAppTheme } from '../../theme';
+import { ScreenFade } from '../../components/screen-fade';
+import { FadeIn } from '../../components/fade-in';
 
 export default function StatisticsScreen() {
   const { ready, settings, budgets } = useAppData();
@@ -48,21 +50,25 @@ export default function StatisticsScreen() {
   const budgetNames = new Map(budgets.map((budget) => [budget.id, budget.name]));
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScreenFade>
+      <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.statRow}>
         <StatCard
           label="Avg spending / month"
-          value={average === null ? '—' : formatCents(average, symbol)}
+          value={average}
+          format={(v) => formatCents(v, symbol)}
         />
         <StatCard
           label="Highest month"
-          value={highest === null ? '—' : formatCents(highest, symbol)}
+          value={highest}
+          format={(v) => formatCents(v, symbol)}
         />
       </View>
       <View style={styles.statRow}>
         <StatCard
           label="Avg reserve adjustment"
-          value={averageAdjustment === null ? '—' : formatCents(averageAdjustment, symbol)}
+          value={averageAdjustment}
+          format={(v) => formatCents(v, symbol)}
           sub={
             averageAdjustment !== null
               ? averageAdjustment < 0
@@ -86,16 +92,18 @@ export default function StatisticsScreen() {
               .slice()
               .reverse()
               .map((record) => (
-                <View key={record.monthKey} style={styles.historyRow}>
-                  <Text variant="bodyMedium">{shortMonthLabel(record.monthKey)}</Text>
-                  <View style={styles.historyRight}>
-                    <Text variant="bodyMedium">{formatCents(record.spendingCents, symbol)}</Text>
-                    <Text variant="labelSmall" style={styles.historyAdjustment}>
-                      {record.reserveAdjustmentCents >= 0 ? '+' : ''}
-                      {formatCents(record.reserveAdjustmentCents, symbol)} reserve
-                    </Text>
+                <FadeIn key={record.monthKey}>
+                  <View style={styles.historyRow}>
+                    <Text variant="bodyMedium">{shortMonthLabel(record.monthKey)}</Text>
+                    <View style={styles.historyRight}>
+                      <Text variant="bodyMedium">{formatCents(record.spendingCents, symbol)}</Text>
+                      <Text variant="labelSmall" style={styles.historyAdjustment}>
+                        {record.reserveAdjustmentCents >= 0 ? '+' : ''}
+                        {formatCents(record.reserveAdjustmentCents, symbol)} reserve
+                      </Text>
+                    </View>
                   </View>
-                </View>
+                </FadeIn>
               ))
           )}
         </Card.Content>
@@ -112,11 +120,12 @@ export default function StatisticsScreen() {
             [...allTimeByCategory.entries()]
               .sort((a, b) => b[1] - a[1])
               .map(([budgetId, total]) => (
-                <List.Item
-                  key={budgetId}
-                  title={budgetNames.get(budgetId) ?? `Budget #${budgetId}`}
-                  right={() => <Text variant="bodyLarge">{formatCents(total, symbol)}</Text>}
-                />
+                <FadeIn key={String(budgetId)}>
+                  <List.Item
+                    title={budgetNames.get(budgetId) ?? `Budget #${budgetId}`}
+                    right={() => <Text variant="bodyLarge">{formatCents(total, symbol)}</Text>}
+                  />
+                </FadeIn>
               ))
           )}
         </Card.Content>
@@ -158,6 +167,7 @@ export default function StatisticsScreen() {
         </Card.Content>
       </Card>
     </ScrollView>
+    </ScreenFade>
   );
 }
 

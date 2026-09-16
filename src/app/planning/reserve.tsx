@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Card, Dialog, List, Portal, SegmentedButtons, Snackbar, TextInput, IconButton } from 'react-native-paper';
+import { Button, Card, List, Portal, SegmentedButtons, Snackbar, TextInput, IconButton } from 'react-native-paper';
 import { useAppData } from '../../data/DataProvider';
 import { getMonthTransfers } from '../../database/reserve';
 import type { ReserveTransfer } from '../../models';
 import { formatCents } from '../../utils/currency';
 import { StatCard } from '../../components/stat-card';
 import { AmountInput } from '../../components/amount-input';
+import { AppDialog } from '../../components/app-dialog';
 import { LoadingScreen } from '../../components/loading-screen';
+import { FadeIn } from '../../components/fade-in';
 
 export default function ReserveScreen() {
   const {
@@ -51,13 +53,22 @@ export default function ReserveScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.statRow}>
-        <StatCard label="Starting reserve" value={formatCents(projection.startingReserveCents, symbol)} />
-        <StatCard label="Ending reserve" value={formatCents(projection.endingReserveCents, symbol)} />
+        <StatCard
+          label="Starting reserve"
+          value={projection.startingReserveCents}
+          format={(v) => formatCents(v, symbol)}
+        />
+        <StatCard
+          label="Ending reserve"
+          value={projection.endingReserveCents}
+          format={(v) => formatCents(v, symbol)}
+        />
       </View>
       <View style={styles.statRow}>
         <StatCard
           label="Month surplus"
-          value={(adjustment >= 0 ? '+' : '') + formatCents(adjustment, symbol)}
+          value={adjustment}
+          format={(v) => (v >= 0 ? '+' : '') + formatCents(v, symbol)}
           sub={projection.overspent ? 'Spending above allowance draws the reserve' : 'Unused allowance stays in the reserve'}
           tone={projection.overspent ? 'bad' : 'good'}
         />
@@ -65,7 +76,8 @@ export default function ReserveScreen() {
       <View style={styles.statRow}>
         <StatCard
           label="Net transfers"
-          value={(projection.transferNetCents >= 0 ? '+' : '') + formatCents(projection.transferNetCents, symbol)}
+          value={projection.transferNetCents}
+          format={(v) => (v >= 0 ? '+' : '') + formatCents(v, symbol)}
           sub="Into the reserve (+) / out to the month (−)"
         />
       </View>
@@ -80,20 +92,21 @@ export default function ReserveScreen() {
             />
           ) : (
             transfers.map((transfer) => (
-              <List.Item
-                key={transfer.id}
-                title={`${transfer.direction === 'to-reserve' ? 'To reserve' : 'To month'} · ${formatCents(transfer.amountCents, symbol)}`}
-                description={transfer.note ?? ''}
-                left={(props) => (
-                  <List.Icon {...props} icon={transfer.direction === 'to-reserve' ? 'arrow-collapse-down' : 'arrow-expand-up'} />
-                )}
-                right={() => (
-                  <IconButton
-                    icon="close-circle-outline"
-                    onPress={() => removeReserveTransfer(transfer.id)}
-                  />
-                )}
-              />
+              <FadeIn key={transfer.id}>
+                <List.Item
+                  title={`${transfer.direction === 'to-reserve' ? 'To reserve' : 'To month'} · ${formatCents(transfer.amountCents, symbol)}`}
+                  description={transfer.note ?? ''}
+                  left={(props) => (
+                    <List.Icon {...props} icon={transfer.direction === 'to-reserve' ? 'arrow-collapse-down' : 'arrow-expand-up'} />
+                  )}
+                  right={() => (
+                    <IconButton
+                      icon="close-circle-outline"
+                      onPress={() => removeReserveTransfer(transfer.id)}
+                    />
+                  )}
+                />
+              </FadeIn>
             ))
           )}
           <Button
@@ -152,9 +165,9 @@ export default function ReserveScreen() {
       </Card>
 
       <Portal>
-        <Dialog visible={initialDialog} onDismiss={() => setInitialDialog(false)}>
-          <Dialog.Title>Initial reserve</Dialog.Title>
-          <Dialog.Content>
+        <AppDialog visible={initialDialog} onDismiss={() => setInitialDialog(false)}>
+          <AppDialog.Title>Initial reserve</AppDialog.Title>
+          <AppDialog.Content>
             <AmountInput
               label="Initial reserve"
               value={initialDraft}
@@ -162,8 +175,8 @@ export default function ReserveScreen() {
               prefix={symbol}
               error={initialError}
             />
-          </Dialog.Content>
-          <Dialog.Actions>
+          </AppDialog.Content>
+          <AppDialog.Actions>
             <Button onPress={() => setInitialDialog(false)}>Cancel</Button>
             <Button
               onPress={async () => {
@@ -182,12 +195,12 @@ export default function ReserveScreen() {
             >
               Save
             </Button>
-          </Dialog.Actions>
-        </Dialog>
+          </AppDialog.Actions>
+        </AppDialog>
 
-        <Dialog visible={transferDialog} onDismiss={() => setTransferDialog(false)}>
-          <Dialog.Title>Reserve transfer</Dialog.Title>
-          <Dialog.Content>
+        <AppDialog visible={transferDialog} onDismiss={() => setTransferDialog(false)}>
+          <AppDialog.Title>Reserve transfer</AppDialog.Title>
+          <AppDialog.Content>
             <SegmentedButtons
               value={transferDirection}
               onValueChange={(value) => setTransferDirection(value as 'to-reserve' | 'to-month')}
@@ -211,8 +224,8 @@ export default function ReserveScreen() {
               mode="outlined"
               style={styles.field}
             />
-          </Dialog.Content>
-          <Dialog.Actions>
+          </AppDialog.Content>
+          <AppDialog.Actions>
             <Button onPress={() => setTransferDialog(false)}>Cancel</Button>
             <Button
               disabled={saving}
@@ -234,8 +247,8 @@ export default function ReserveScreen() {
             >
               Save
             </Button>
-          </Dialog.Actions>
-        </Dialog>
+          </AppDialog.Actions>
+        </AppDialog>
       </Portal>
 
       <Snackbar visible={toast !== null} onDismiss={() => setToast(null)} duration={2000}>

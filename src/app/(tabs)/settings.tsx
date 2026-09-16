@@ -1,15 +1,13 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Dialog, List, Portal, Text } from 'react-native-paper';
-import dayjs from 'dayjs';
+import { List, Portal, Text } from 'react-native-paper';
 import { useAppData } from '../../data/DataProvider';
 import { formatCents } from '../../utils/currency';
 import { AmountInput } from '../../components/amount-input';
-import { CoconutLogo } from '../../components/coconut-logo';
 import { LoadingScreen } from '../../components/loading-screen';
 import { useAppTheme } from '../../theme';
-import { releaseInfo } from '../../config/release-info';
+import { AppDialog } from '../../components/app-dialog';
 
 const THEME_OPTIONS: { value: 'light' | 'dark' | 'system'; label: string }[] = [
   { value: 'system', label: 'System' },
@@ -41,14 +39,6 @@ export default function SettingsScreen() {
   }
 
   const symbol = settings.currencySymbol;
-  const builtVersion =
-    releaseInfo.releasedAt === ''
-      ? releaseInfo.version
-      : `${releaseInfo.version} (build ${releaseInfo.versionCode})`;
-  const releasedLabel =
-    releaseInfo.releasedAt === ''
-      ? 'Not yet released'
-      : dayjs(releaseInfo.releasedAt).format('D MMM YYYY, HH:mm');
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -123,41 +113,23 @@ export default function SettingsScreen() {
       <List.Section>
         <List.Subheader>About</List.Subheader>
         <List.Item
-          title="Coconut"
-          description="Budget management"
-          left={(props) => <List.Icon {...props} icon="wallet-outline" />}
+          title="What's New"
+          description="What changed in each release"
+          left={(props) => <List.Icon {...props} icon="creation-outline" />}
+          onPress={() => router.push('/whats-new')}
         />
         <List.Item
-          title="Developer"
-          description="Henrik Kerezsi"
-          left={(props) => <List.Icon {...props} icon="account-outline" />}
-        />
-        <List.Item
-          title="Version"
-          description={builtVersion}
-          left={(props) => <List.Icon {...props} icon="tag-outline" />}
-        />
-        <List.Item
-          title="Released"
-          description={releasedLabel}
-          left={(props) => <List.Icon {...props} icon="clock-outline" />}
+          title="About Coconut"
+          description="Developer, version, source code"
+          left={(props) => <List.Icon {...props} icon="information-outline" />}
+          onPress={() => router.push('/about')}
         />
       </List.Section>
 
-      <Text variant="bodySmall" style={styles.about}>
-        Coconut is a private, offline-first budget app. Each month it compares your
-        allowance against planned fixed expenses and flexible budgets, and it tracks a
-        savings reserve. Everything stays on this device only — no network, no account,
-        no tracking.
-      </Text>
-      <View style={styles.aboutLogo}>
-        <CoconutLogo size={36} />
-      </View>
-
       <Portal>
-        <Dialog visible={recentCountDialog} onDismiss={() => setRecentCountDialog(false)}>
-          <Dialog.Title>Recent transactions</Dialog.Title>
-          <Dialog.Content>
+        <AppDialog visible={recentCountDialog} onDismiss={() => setRecentCountDialog(false)}>
+          <AppDialog.Title>Recent transactions</AppDialog.Title>
+          <AppDialog.Content>
             {RECENT_COUNT_OPTIONS.map((count) => (
               <List.Item
                 key={count}
@@ -173,15 +145,15 @@ export default function SettingsScreen() {
                 }
               />
             ))}
-          </Dialog.Content>
-          <Dialog.Actions>
+          </AppDialog.Content>
+          <AppDialog.Actions>
             <List.Item title="Cancel" onPress={() => setRecentCountDialog(false)} />
-          </Dialog.Actions>
-        </Dialog>
+          </AppDialog.Actions>
+        </AppDialog>
 
-        <Dialog visible={appearanceDialog} onDismiss={() => setAppearanceDialog(false)}>
-          <Dialog.Title>Theme</Dialog.Title>
-          <Dialog.Content>
+        <AppDialog visible={appearanceDialog} onDismiss={() => setAppearanceDialog(false)}>
+          <AppDialog.Title>Theme</AppDialog.Title>
+          <AppDialog.Content>
             {THEME_OPTIONS.map((option) => (
               <List.Item
                 key={option.value}
@@ -197,15 +169,15 @@ export default function SettingsScreen() {
                 }
               />
             ))}
-          </Dialog.Content>
-          <Dialog.Actions>
+          </AppDialog.Content>
+          <AppDialog.Actions>
             <List.Item title="Cancel" onPress={() => setAppearanceDialog(false)} />
-          </Dialog.Actions>
-        </Dialog>
+          </AppDialog.Actions>
+        </AppDialog>
 
-        <Dialog visible={allowanceDialog} onDismiss={() => setAllowanceDialog(false)}>
-          <Dialog.Title>Monthly allowance</Dialog.Title>
-          <Dialog.Content>
+        <AppDialog visible={allowanceDialog} onDismiss={() => setAllowanceDialog(false)}>
+          <AppDialog.Title>Monthly allowance</AppDialog.Title>
+          <AppDialog.Content>
             <AmountInput
               label="Allowance"
               value={allowanceDraft}
@@ -216,8 +188,8 @@ export default function SettingsScreen() {
             <Text variant="bodySmall" style={styles.dialogHint}>
               Applies to {currentMonth ? 'the current' : ''} and future months. Past months keep their own allowance.
             </Text>
-          </Dialog.Content>
-          <Dialog.Actions>
+          </AppDialog.Content>
+          <AppDialog.Actions>
             <List.Item
               title="Cancel"
               onPress={() => setAllowanceDialog(false)}
@@ -238,8 +210,8 @@ export default function SettingsScreen() {
                 setAllowanceDialog(false);
               }}
             />
-          </Dialog.Actions>
-        </Dialog>
+          </AppDialog.Actions>
+        </AppDialog>
       </Portal>
     </ScrollView>
   );
@@ -248,16 +220,6 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     paddingBottom: 32,
-  },
-  about: {
-    textAlign: 'center',
-    opacity: 0.6,
-    marginTop: 24,
-    paddingHorizontal: 32,
-  },
-  aboutLogo: {
-    alignItems: 'center',
-    marginTop: 12,
   },
   dialogHint: {
     marginTop: 8,

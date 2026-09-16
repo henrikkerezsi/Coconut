@@ -4,13 +4,14 @@ import { Card, FAB, List, ProgressBar, Text } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useAppData } from '../../data/DataProvider';
 import { formatCents } from '../../utils/currency';
-import { currentMonthKey, monthLabel } from '../../utils/date';
+import { currentMonthKey, monthLabel, relativeDayLabel } from '../../utils/date';
 import { StatCard, type Tone } from '../../components/stat-card';
 import { LoadingScreen } from '../../components/loading-screen';
+import { CoconutLogo } from '../../components/coconut-logo';
 import { useAppTheme } from '../../theme';
 
 export default function OverviewScreen() {
-  const { ready, settings, currentDashboard, currentMonth } = useAppData();
+  const { ready, settings, recentTransactions, currentDashboard, currentMonth } = useAppData();
   const theme = useAppTheme();
   const router = useRouter();
 
@@ -33,11 +34,20 @@ export default function OverviewScreen() {
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.container}>
+      <View style={styles.brandRow}>
+        <CoconutLogo size={28} />
+        <Text
+          variant="bodyMedium"
+          style={[styles.brandWord, { color: theme.text.secondary }]}
+        >
+          Coconut
+        </Text>
+      </View>
       <Text variant="titleLarge" style={styles.monthTitle}>
         {monthLabel(currentMonthKey())}
       </Text>
 
-      <Card mode="contained" style={styles.reserveCard}>
+      <Card mode="contained" style={styles.reserveCard} contentStyle={styles.cardContent}>
         <Card.Title
           title="Savings Reserve"
           subtitle={reserved ? 'Month closed' : 'Projected month end'}
@@ -68,7 +78,7 @@ export default function OverviewScreen() {
         <StatCard label="Remaining" value={formatCents(remaining, symbol)} tone={remainingTone} sub={remaining < 0 ? 'Over the allowance' : null} />
       </View>
 
-      <Card mode="elevated" style={styles.card}>
+      <Card mode="elevated" style={styles.card} contentStyle={styles.cardContent}>
         <Card.Title title="Planned vs Allowance" />
         <Card.Content>
           <View style={styles.row}>
@@ -85,7 +95,7 @@ export default function OverviewScreen() {
         </Card.Content>
       </Card>
 
-      <Card mode="elevated" style={styles.card}>
+      <Card mode="elevated" style={styles.card} contentStyle={styles.cardContent}>
         <Card.Title
           title="Fixed Expenses"
           subtitle={`${formatCents(forecast.fixedExpectedTotalCents, symbol)} expected`}
@@ -113,7 +123,7 @@ export default function OverviewScreen() {
         </Card.Content>
       </Card>
 
-      <Card mode="elevated" style={styles.card}>
+      <Card mode="elevated" style={styles.card} contentStyle={styles.cardContent}>
         <Card.Title title="Flexible Budgets" subtitle={`${formatCents(forecast.budgetPlannedTotalCents, symbol)} planned`} />
         <Card.Content>
           {budgetStatuses.length === 0 ? (
@@ -144,6 +154,51 @@ export default function OverviewScreen() {
           )}
         </Card.Content>
       </Card>
+
+      <Card mode="elevated" style={styles.card} contentStyle={styles.cardContent}>
+        <Card.Title
+          title="Recent Transactions"
+          right={() => (
+            <Text
+              variant="labelMedium"
+              style={{ color: theme.colors.primary, marginRight: 12, opacity: 0.8 }}
+              onPress={() => router.push('/transactions')}
+            >
+              See all
+            </Text>
+          )}
+        />
+        <Card.Content>
+          {recentTransactions.length === 0 ? (
+            <Text variant="bodyMedium" style={styles.empty}>
+              No transactions yet.
+            </Text>
+          ) : (
+            recentTransactions.map((tx) => {
+              const budgetName = currentDashboard?.budgetNames.get(tx.budgetId ?? -1);
+              return (
+                <List.Item
+                  key={tx.id}
+                  title={tx.merchant}
+                  description={relativeDayLabel(tx.date)}
+                  left={(props) => <List.Icon {...props} icon="cash" />}
+                  right={() => (
+                    <View style={styles.transactionRight}>
+                      <Text variant="bodyLarge">{formatCents(tx.amountCents, symbol)}</Text>
+                      {budgetName ? (
+                        <Text variant="labelSmall" style={styles.budgetTag}>
+                          {budgetName}
+                        </Text>
+                      ) : null}
+                    </View>
+                  )}
+                  onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: String(tx.id) } })}
+                />
+              );
+            })
+          )}
+        </Card.Content>
+      </Card>
       </ScrollView>
       <FAB icon="plus" style={styles.fab} onPress={() => router.push('/transaction/new')} />
     </View>
@@ -157,6 +212,19 @@ const styles = StyleSheet.create({
   container: {
     padding: 16,
     paddingBottom: 96,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  brandWord: {
+    letterSpacing: 2,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    fontSize: 12,
   },
   monthTitle: {
     marginBottom: 12,
@@ -175,6 +243,10 @@ const styles = StyleSheet.create({
   },
   card: {
     marginBottom: 12,
+  },
+  cardContent: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
   },
   row: {
     flexDirection: 'row',
@@ -197,6 +269,13 @@ const styles = StyleSheet.create({
   progress: {
     marginTop: 4,
     borderRadius: 4,
+  },
+  transactionRight: {
+    alignItems: 'flex-end',
+  },
+  budgetTag: {
+    opacity: 0.6,
+    marginTop: 2,
   },
   fab: {
     position: 'absolute',

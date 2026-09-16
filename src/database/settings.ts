@@ -6,17 +6,23 @@ export const DEFAULT_SETTINGS: Settings = {
   monthlyAllowanceCents: 0,
   initialReserveCents: 0,
   currencySymbol: '',
+  themeMode: 'system',
+  recentTransactionsCount: 5,
 };
 
 type SettingsKey =
   | 'monthly_allowance_cents'
   | 'initial_reserve_cents'
-  | 'currency_symbol';
+  | 'currency_symbol'
+  | 'theme_mode'
+  | 'recent_transactions_count';
 
 const SETTINGS_KEY_MAP: Record<keyof Settings, SettingsKey> = {
   monthlyAllowanceCents: 'monthly_allowance_cents',
   initialReserveCents: 'initial_reserve_cents',
   currencySymbol: 'currency_symbol',
+  themeMode: 'theme_mode',
+  recentTransactionsCount: 'recent_transactions_count',
 };
 
 function rowToSettings(
@@ -35,6 +41,13 @@ function rowToSettings(
         break;
       case 'currency_symbol':
         settings.currencySymbol = row.value;
+        break;
+      case 'theme_mode':
+        settings.themeMode =
+          row.value === 'light' || row.value === 'dark' ? row.value : 'system';
+        break;
+      case 'recent_transactions_count':
+        settings.recentTransactionsCount = Math.max(1, Math.min(50, Number(row.value)));
         break;
     }
   }

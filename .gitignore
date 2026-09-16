@@ -3,6 +3,9 @@
 # dependencies
 node_modules/
 
+# release plan file
+release-plan.md
+
 # Expo
 .expo/
 dist/

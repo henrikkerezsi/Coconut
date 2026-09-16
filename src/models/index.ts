@@ -10,6 +10,8 @@ export interface Settings {
   monthlyAllowanceCents: number;
   initialReserveCents: number;
   currencySymbol: string;
+  themeMode: 'light' | 'dark' | 'system';
+  recentTransactionsCount: number;
 }
 
 export interface Month {

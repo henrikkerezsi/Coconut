@@ -23,7 +23,7 @@ export function StatCard({ label, value, sub, tone = 'neutral' }: StatCardProps)
   const color = TONE_COLORS[tone];
   return (
     <Card mode="contained" style={styles.card}>
-      <Card.Content>
+      <Card.Content style={styles.content}>
         <Text variant="labelMedium" style={styles.label}>
           {label}
         </Text>
@@ -43,6 +43,10 @@ export function StatCard({ label, value, sub, tone = 'neutral' }: StatCardProps)
 const styles = StyleSheet.create({
   card: {
     flex: 1,
+  },
+  content: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   label: {
     opacity: 0.7,

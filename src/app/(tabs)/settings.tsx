@@ -1,18 +1,38 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Dialog, List, Portal, Text } from 'react-native-paper';
 import { useAppData } from '../../data/DataProvider';
 import { formatCents } from '../../utils/currency';
 import { AmountInput } from '../../components/amount-input';
+import { CoconutLogo } from '../../components/coconut-logo';
 import { LoadingScreen } from '../../components/loading-screen';
+import { useAppTheme } from '../../theme';
+
+const THEME_OPTIONS: { value: 'light' | 'dark' | 'system'; label: string }[] = [
+  { value: 'system', label: 'System' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+];
+
+const RECENT_COUNT_OPTIONS = [3, 5, 8, 10, 15, 20];
 
 export default function SettingsScreen() {
-  const { ready, settings, currentMonth, setMonthlyAllowance } = useAppData();
+  const {
+    ready,
+    settings,
+    currentMonth,
+    setMonthlyAllowance,
+    setThemeMode,
+    setRecentTransactionsCount,
+  } = useAppData();
+  const theme = useAppTheme();
   const router = useRouter();
   const [allowanceDialog, setAllowanceDialog] = useState(false);
   const [allowanceDraft, setAllowanceDraft] = useState<number | null>(null);
   const [allowanceError, setAllowanceError] = useState<string | null>(null);
+  const [appearanceDialog, setAppearanceDialog] = useState(false);
+  const [recentCountDialog, setRecentCountDialog] = useState(false);
 
   if (!ready) {
     return <LoadingScreen />;
@@ -68,11 +88,84 @@ export default function SettingsScreen() {
         />
       </List.Section>
 
+      <List.Section>
+        <List.Subheader>Home screen</List.Subheader>
+        <List.Item
+          title="Recent transactions"
+          description={`Show the last ${settings.recentTransactionsCount} transactions on the home screen`}
+          left={(props) => <List.Icon {...props} icon="history" />}
+          onPress={() => setRecentCountDialog(true)}
+        />
+      </List.Section>
+
+      <List.Section>
+        <List.Subheader>Appearance</List.Subheader>
+        <List.Item
+          title="Theme"
+          description={`${THEME_OPTIONS.find((o) => o.value === settings.themeMode)?.label ?? 'System'}${
+            settings.themeMode === 'system' ? ' (follows device)' : ''
+          }`}
+          left={(props) => <List.Icon {...props} icon="theme-light-dark" />}
+          onPress={() => setAppearanceDialog(true)}
+        />
+      </List.Section>
+
       <Text variant="bodySmall" style={styles.about}>
         Coconut keeps all data on this device only. No network, no account, no tracking.
       </Text>
+      <View style={styles.aboutLogo}>
+        <CoconutLogo size={36} />
+      </View>
 
       <Portal>
+        <Dialog visible={recentCountDialog} onDismiss={() => setRecentCountDialog(false)}>
+          <Dialog.Title>Recent transactions</Dialog.Title>
+          <Dialog.Content>
+            {RECENT_COUNT_OPTIONS.map((count) => (
+              <List.Item
+                key={count}
+                title={`Last ${count}`}
+                onPress={() => {
+                  setRecentTransactionsCount(count);
+                  setRecentCountDialog(false);
+                }}
+                right={() =>
+                  settings.recentTransactionsCount === count ? (
+                    <List.Icon icon="check" color={theme.brand.primary.base} />
+                  ) : null
+                }
+              />
+            ))}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <List.Item title="Cancel" onPress={() => setRecentCountDialog(false)} />
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog visible={appearanceDialog} onDismiss={() => setAppearanceDialog(false)}>
+          <Dialog.Title>Theme</Dialog.Title>
+          <Dialog.Content>
+            {THEME_OPTIONS.map((option) => (
+              <List.Item
+                key={option.value}
+                title={option.label}
+                onPress={() => {
+                  setThemeMode(option.value);
+                  setAppearanceDialog(false);
+                }}
+                right={() =>
+                  settings.themeMode === option.value ? (
+                    <List.Icon icon="check" color={theme.brand.primary.base} />
+                  ) : null
+                }
+              />
+            ))}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <List.Item title="Cancel" onPress={() => setAppearanceDialog(false)} />
+          </Dialog.Actions>
+        </Dialog>
+
         <Dialog visible={allowanceDialog} onDismiss={() => setAllowanceDialog(false)}>
           <Dialog.Title>Monthly allowance</Dialog.Title>
           <Dialog.Content>
@@ -124,6 +217,10 @@ const styles = StyleSheet.create({
     opacity: 0.6,
     marginTop: 24,
     paddingHorizontal: 32,
+  },
+  aboutLogo: {
+    alignItems: 'center',
+    marginTop: 12,
   },
   dialogHint: {
     marginTop: 8,

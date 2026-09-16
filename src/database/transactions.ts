@@ -90,6 +90,18 @@ export async function getMonthTransactions(
   return rows.map(rowToTransaction);
 }
 
+export async function getRecentTransactions(
+  limit: number,
+  db?: SQLiteDatabase
+): Promise<Transaction[]> {
+  const database = db ?? (await getDatabase());
+  const rows = await database.getAllAsync<TransactionRow>(
+    'SELECT * FROM transactions ORDER BY date DESC, id DESC LIMIT ?',
+    [limit]
+  );
+  return rows.map(rowToTransaction);
+}
+
 export async function getAllTransactions(db?: SQLiteDatabase): Promise<Transaction[]> {
   const database = db ?? (await getDatabase());
   const rows = await database.getAllAsync<TransactionRow>(

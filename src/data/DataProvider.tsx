@@ -46,6 +46,7 @@ import {
 import {
   createTransaction,
   deleteTransaction as deleteTransactionRow,
+  getRecentTransactions,
   updateTransaction as updateTransactionRow,
   type TransactionInput,
 } from '../database/transactions';
@@ -89,6 +90,7 @@ export interface MonthDashboard {
 interface AppData {
   ready: boolean;
   settings: Settings;
+  recentTransactions: Transaction[];
   currentMonth: Month | null;
   currentDashboard: MonthDashboard | null;
   allFixedExpenses: FixedExpense[];
@@ -98,6 +100,8 @@ interface AppData {
   setMonthlyAllowance: (cents: number) => Promise<void>;
   setInitialReserve: (cents: number) => Promise<void>;
   setCurrencySymbol: (symbol: string) => Promise<void>;
+  setThemeMode: (mode: Settings['themeMode']) => Promise<void>;
+  setRecentTransactionsCount: (count: number) => Promise<void>;
   addFixedExpense: (input: Omit<FixedExpense, 'id'>) => Promise<void>;
   saveFixedExpense: (id: number, input: Omit<FixedExpense, 'id'>) => Promise<void>;
   removeFixedExpense: (id: number) => Promise<void>;
@@ -190,9 +194,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     monthlyAllowanceCents: 0,
     initialReserveCents: 0,
     currencySymbol: '',
+    themeMode: 'system',
+    recentTransactionsCount: 5,
   });
   const [currentMonth, setCurrentMonth] = useState<Month | null>(null);
   const [currentDashboard, setCurrentDashboard] = useState<MonthDashboard | null>(null);
+  const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
   const [allFixedExpenses, setAllFixedExpenses] = useState<FixedExpense[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [allMonths, setAllMonths] = useState<Month[]>([]);
@@ -207,6 +214,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const monthKey = currentMonthKey();
     setCurrentMonth(await getMonth(monthKey, db));
     setCurrentDashboard(await buildDashboard(monthKey));
+    setRecentTransactions(await getRecentTransactions(nextSettings.recentTransactionsCount, db));
     setAllFixedExpenses(await getAllFixedExpenses(db));
     setBudgets(await getAllBudgets(db));
     setAllMonths(await getAllMonths(db));
@@ -232,6 +240,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return {
       ready,
       settings,
+      recentTransactions,
       currentMonth,
       currentDashboard,
       allFixedExpenses,
@@ -252,6 +261,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setCurrencySymbol: async (symbol) => {
         const db = await getDatabase();
         await updateSettings({ currencySymbol: symbol }, db);
+        await refresh();
+      },
+      setThemeMode: async (mode) => {
+        const db = await getDatabase();
+        await updateSettings({ themeMode: mode }, db);
+        await refresh();
+      },
+      setRecentTransactionsCount: async (count) => {
+        const db = await getDatabase();
+        await updateSettings({ recentTransactionsCount: count }, db);
         await refresh();
       },
       addFixedExpense: async (input) => {
@@ -341,7 +360,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       },
       refresh,
     };
-  }, [ready, settings, currentMonth, currentDashboard, allFixedExpenses, budgets, allMonths, refresh]);
+  }, [ready, settings, recentTransactions, currentMonth, currentDashboard, allFixedExpenses, budgets, allMonths, refresh]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

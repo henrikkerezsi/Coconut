@@ -35,7 +35,12 @@ function TabItem({
       <View
         style={[
           styles.tabIndicator,
-          isFocused && { backgroundColor: theme.colors.primaryContainer },
+          {
+            backgroundColor: isFocused ? theme.colors.primaryContainer : 'transparent',
+            borderRadius: theme.radii.pill,
+            paddingHorizontal: theme.spacing[4],
+            paddingVertical: theme.spacing[1],
+          },
         ]}
       >
         <MaterialCommunityIcons name={icon} color={color} size={24} />
@@ -57,7 +62,8 @@ export function CustomTabBar({ state, navigation, descriptors, insets }: BottomT
         {
           backgroundColor: theme.colors.surface,
           borderTopColor: theme.colors.outlineVariant,
-          paddingBottom: 8 + insets.bottom,
+          paddingTop: theme.spacing[1],
+          paddingBottom: theme.spacing[2] + insets.bottom,
         },
       ]}
     >
@@ -102,7 +108,6 @@ const styles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
     borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 4,
   },
   tabItem: {
     flex: 1,
@@ -110,9 +115,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tabIndicator: {
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tabLabel: {
     marginTop: 2,

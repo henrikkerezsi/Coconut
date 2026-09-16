@@ -34,6 +34,21 @@ if git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
   exit 1
 fi
 
+# --- Local Android build sanity checks (no Expo/EAS account required) ---
+SDK_ROOT="${ANDROID_HOME:-$HOME/Android/Sdk}"
+if [[ ! -d "$SDK_ROOT/cmake/3.22.1" ]]; then
+  echo "Missing Android CMake 3.22.1 under $SDK_ROOT." >&2
+  echo "Install it with:" >&2
+  echo "  $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK_ROOT \"cmake;3.22.1\"" >&2
+  exit 1
+fi
+if [[ ! -d "$SDK_ROOT/ndk/27.1.12297006" ]]; then
+  echo "Missing Android NDK 27.1.12297006 under $SDK_ROOT." >&2
+  echo "Install it with:" >&2
+  echo "  $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK_ROOT \"ndk;27.1.12297006\"" >&2
+  exit 1
+fi
+
 echo "Releasing Coconut $VERSION ..."
 
 VERSION_CODE="$(node scripts/update-version.js "$VERSION")"
@@ -50,17 +65,25 @@ echo "Pushing commit and tag..."
 git push origin HEAD
 git push origin "$TAG"
 
-echo "Starting EAS Android production build (APK)..."
-set +e
-npx eas-cli build --platform android --profile production --non-interactive
-EAS_STATUS=$?
-set -e
+# --- Local release APK build ---
+export ANDROID_HOME="$SDK_ROOT"
+export CI=1
 
-if [[ "$EAS_STATUS" -ne 0 ]]; then
-  echo "NOTE: the EAS build did not start (exit $EAS_STATUS)." >&2
-  echo "The version was already committed and tagged as $TAG." >&2
-  echo "You can start the build later with: npx eas-cli build --platform android --profile production" >&2
+echo "Generating the native Android project..."
+npx expo prebuild --platform android --no-install --clean
+# prebuild rewrites the npm scripts; we intentionally keep the original ones.
+git restore package.json
+
+echo "Building the release APK (this can take a while on the first run)..."
+(cd android && ./gradlew assembleRelease)
+
+APK="android/app/build/outputs/apk/release/app-release.apk"
+if [[ ! -f "$APK" ]]; then
+  echo "Build finished but the APK was not found at $APK." >&2
+  exit 1
 fi
+APK_SIZE="$(du -h "$APK" | cut -f1)"
+echo "APK ready: $APK ($APK_SIZE)"
 
 REMOTE="$(git config --get remote.origin.url || true)"
 if [[ -n "$REMOTE" ]]; then
@@ -75,27 +98,22 @@ fi
 cat <<EOF
 
 ================================================================================
-Release $TAG (build $VERSION_CODE) pushed and the Android build is running.
+Release $TAG (build $VERSION_CODE) pushed and the APK is built locally.
 
 Next steps - attach the APK to a GitHub release:
-  1. Wait for the build to finish, then get the APK download link:
-       npx eas-cli build:list --platform android --limit 1
-     (or open the build URL printed by eas build above, and use "Install" /
-      the .apk artifact link)
-
-  2. Download the APK, then create the GitHub release with the file attached:
+  1. Create the GitHub release with the APK attached:
        gh release create $TAG --title "Coconut $VERSION" \\
          --notes "Release notes for Coconut $VERSION" \\
-         /path/to/coconut-$VERSION.apk
+         "$APK"
 
-  3. Or upload it manually in the browser:
+  2. Or upload it manually in the browser:
        $GITHUB_RELEASES_URL
 
-     Add the release notes (changes since the previous release) to the body
-     and publish.
+     Add the release notes (changes since the previous release) to the body and
+     publish.
+
+Note: this APK is signed with the debug keystore. It is fine for sideloading
+from a GitHub release. If you later publish to the Play Store, set up proper
+release signing (a production keystore + EAS or a local signing config).
 ================================================================================
 EOF
-
-if [[ "$EAS_STATUS" -ne 0 ]]; then
-  exit "$EAS_STATUS"
-fi

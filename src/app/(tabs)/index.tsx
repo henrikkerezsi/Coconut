@@ -1,6 +1,7 @@
 import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Card, List, ProgressBar, Text } from 'react-native-paper';
+import { Card, FAB, List, ProgressBar, Text } from 'react-native-paper';
+import { useRouter } from 'expo-router';
 import { useAppData } from '../../data/DataProvider';
 import { formatCents } from '../../utils/currency';
 import { currentMonthKey, monthLabel } from '../../utils/date';
@@ -11,6 +12,7 @@ import { useAppTheme } from '../../theme';
 export default function OverviewScreen() {
   const { ready, settings, currentDashboard, currentMonth } = useAppData();
   const theme = useAppTheme();
+  const router = useRouter();
 
   if (!ready) {
     return <LoadingScreen />;
@@ -29,7 +31,8 @@ export default function OverviewScreen() {
     reserveProjection.adjustmentCents > 0 ? 'bad' : reserveProjection.adjustmentCents < 0 ? 'good' : 'neutral';
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <View style={styles.screen}>
+      <ScrollView contentContainerStyle={styles.container}>
       <Text variant="titleLarge" style={styles.monthTitle}>
         {monthLabel(currentMonthKey())}
       </Text>
@@ -141,14 +144,19 @@ export default function OverviewScreen() {
           )}
         </Card.Content>
       </Card>
-    </ScrollView>
+      </ScrollView>
+      <FAB icon="plus" style={styles.fab} onPress={() => router.push('/transaction/new')} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+  },
   container: {
     padding: 16,
-    paddingBottom: 32,
+    paddingBottom: 96,
   },
   monthTitle: {
     marginBottom: 12,
@@ -189,5 +197,10 @@ const styles = StyleSheet.create({
   progress: {
     marginTop: 4,
     borderRadius: 4,
+  },
+  fab: {
+    position: 'absolute',
+    right: 16,
+    bottom: 16,
   },
 });

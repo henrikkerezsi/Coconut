@@ -1,6 +1,5 @@
 import {
   centsFromString,
-  centsToInput,
   formatCents,
 } from '../../src/utils/currency';
 import { monthKeyOf, previousMonthKey, nextMonthKey } from '../../src/utils/date';
@@ -45,14 +44,6 @@ describe('centsFromString', () => {
     expect(centsFromString('abc')).toBeNull();
     expect(centsFromString('12.345')).toBeNull();
     expect(centsFromString('')).toBeNull();
-  });
-});
-
-describe('centsToInput', () => {
-  it('round-trips a stored amount into an editable string', () => {
-    expect(centsToInput(1234)).toBe('12.34');
-    expect(centsToInput(5)).toBe('0.05');
-    expect(centsToInput(-1234)).toBe('-12.34');
   });
 });
 

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { HelperText, TextInput as PaperTextInput } from 'react-native-paper';
-import { centsFromString, centsToInput } from '../utils/currency';
+import { centsFromString } from '../utils/currency';
 
 interface AmountInputProps {
   label: string;
@@ -11,6 +11,14 @@ interface AmountInputProps {
   prefix?: string;
 }
 
+function centsToRawInput(cents: number): string {
+  const sign = cents < 0 ? '-' : '';
+  const absolute = Math.abs(cents);
+  const integer = Math.floor(absolute / 100);
+  const fraction = (absolute % 100).toString().padStart(2, '0');
+  return `${sign}${integer}.${fraction}`;
+}
+
 export function AmountInput({
   label,
   value,
@@ -19,17 +27,22 @@ export function AmountInput({
   error,
   prefix,
 }: AmountInputProps) {
-  const [draftValue, setDraftValue] = useState<number | null>(value);
+  const [text, setText] = useState(() =>
+    value === null ? '' : centsToRawInput(value)
+  );
+  const lastEmitted = useRef(value);
 
-  if (draftValue !== value) {
-    setDraftValue(value);
-  }
-
-  const text = draftValue === null ? '' : centsToInput(draftValue);
+  useEffect(() => {
+    if (value !== lastEmitted.current) {
+      lastEmitted.current = value;
+      setText(value === null ? '' : centsToRawInput(value));
+    }
+  }, [value]);
 
   const handleChange = (next: string) => {
+    setText(next);
     const nextCents = centsFromString(next);
-    setDraftValue(nextCents);
+    lastEmitted.current = nextCents;
     onChange(nextCents);
   };
 

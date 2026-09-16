@@ -25,8 +25,10 @@ export default function ReserveScreen() {
   const [transfers, setTransfers] = useState<ReserveTransfer[]>([]);
   const [initialDialog, setInitialDialog] = useState(false);
   const [initialDraft, setInitialDraft] = useState<number | null>(null);
+  const [initialError, setInitialError] = useState<string | null>(null);
   const [transferDialog, setTransferDialog] = useState(false);
   const [transferAmount, setTransferAmount] = useState<number | null>(null);
+  const [transferError, setTransferError] = useState<string | null>(null);
   const [transferDirection, setTransferDirection] = useState<'to-reserve' | 'to-month'>('to-reserve');
   const [transferNote, setTransferNote] = useState('');
   const [saving, setSaving] = useState(false);
@@ -100,6 +102,7 @@ export default function ReserveScreen() {
               setTransferAmount(null);
               setTransferNote('');
               setTransferDirection('to-reserve');
+              setTransferError(null);
               setTransferDialog(true);
             }}
             style={styles.button}
@@ -118,6 +121,7 @@ export default function ReserveScreen() {
             right={(props) => <List.Icon {...props} icon="chevron-right" />}
             onPress={() => {
               setInitialDraft(settings.initialReserveCents);
+              setInitialError(null);
               setInitialDialog(true);
             }}
           />
@@ -156,15 +160,23 @@ export default function ReserveScreen() {
               value={initialDraft}
               onChange={setInitialDraft}
               prefix={symbol}
+              error={initialError}
             />
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setInitialDialog(false)}>Cancel</Button>
             <Button
               onPress={async () => {
-                if (initialDraft !== null && initialDraft >= 0) {
-                  await setInitialReserve(initialDraft);
+                if (initialDraft === null) {
+                  setInitialError('Enter a valid amount.');
+                  return;
                 }
+                if (initialDraft < 0) {
+                  setInitialError('Amount cannot be negative.');
+                  return;
+                }
+                setInitialError(null);
+                await setInitialReserve(initialDraft);
                 setInitialDialog(false);
               }}
             >
@@ -190,6 +202,7 @@ export default function ReserveScreen() {
               value={transferAmount}
               onChange={setTransferAmount}
               prefix={symbol}
+              error={transferError}
             />
             <TextInput
               label="Note (optional)"
@@ -202,12 +215,14 @@ export default function ReserveScreen() {
           <Dialog.Actions>
             <Button onPress={() => setTransferDialog(false)}>Cancel</Button>
             <Button
-              disabled={saving || transferAmount === null || transferAmount < 0}
+              disabled={saving}
               loading={saving}
               onPress={async () => {
-                if (transferAmount === null) {
+                if (transferAmount === null || transferAmount <= 0) {
+                  setTransferError('Enter a valid amount.');
                   return;
                 }
+                setTransferError(null);
                 setSaving(true);
                 try {
                   await addReserveTransfer(transferAmount, transferDirection, transferNote.trim() || null);

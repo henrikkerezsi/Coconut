@@ -23,10 +23,3 @@ export function centsFromString(value: string): number | null {
   const fractionNumber = fraction.length === 2 ? Number(fraction) : 0;
   return sign * (integer * 100 + fractionNumber);
 }
-
-export function centsToInput(cents: number): string {
-  const absolute = Math.abs(cents);
-  const integer = Math.floor(absolute / 100);
-  const fraction = (absolute % 100).toString().padStart(2, '0');
-  return `${cents < 0 ? '-' : ''}${integer}.${fraction}`;
-}

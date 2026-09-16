@@ -12,6 +12,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const [allowanceDialog, setAllowanceDialog] = useState(false);
   const [allowanceDraft, setAllowanceDraft] = useState<number | null>(null);
+  const [allowanceError, setAllowanceError] = useState<string | null>(null);
 
   if (!ready) {
     return <LoadingScreen />;
@@ -29,6 +30,7 @@ export default function SettingsScreen() {
           left={(props) => <List.Icon {...props} icon="bank-outline" />}
           onPress={() => {
             setAllowanceDraft(settings.monthlyAllowanceCents);
+            setAllowanceError(null);
             setAllowanceDialog(true);
           }}
         />
@@ -79,6 +81,7 @@ export default function SettingsScreen() {
               value={allowanceDraft}
               onChange={setAllowanceDraft}
               prefix={symbol}
+              error={allowanceError}
             />
             <Text variant="bodySmall" style={styles.dialogHint}>
               Applies to {currentMonth ? 'the current' : ''} and future months. Past months keep their own allowance.
@@ -93,9 +96,15 @@ export default function SettingsScreen() {
             <List.Item
               title="Save"
               onPress={() => {
-                if (allowanceDraft !== null && allowanceDraft >= 0) {
-                  setMonthlyAllowance(allowanceDraft);
+                if (allowanceDraft === null) {
+                  setAllowanceError('Enter a valid amount.');
+                  return;
                 }
+                if (allowanceDraft < 0) {
+                  setAllowanceError('Amount cannot be negative.');
+                  return;
+                }
+                setMonthlyAllowance(allowanceDraft);
                 setAllowanceDialog(false);
               }}
             />

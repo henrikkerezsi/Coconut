@@ -58,7 +58,7 @@ export function TransactionForm({
   const handleSubmit = async () => {
     setError(null);
     if (amount === null || amount <= 0) {
-      setError('Enter an amount greater than zero.');
+      setError('Enter a valid amount.');
       return;
     }
     if (merchant.trim().length === 0) {

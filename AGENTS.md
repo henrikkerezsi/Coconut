@@ -60,9 +60,14 @@ src/
 ├── database/      # SQLite schema, migrations, and data-access layer
 ├── models/        # TypeScript types and interfaces (domain model)
 ├── services/      # Business logic / financial calculations (pure TS)
-├── sync/          # Option-al Supabase row sync: pure engine + transport
+├── sync/          # Optional Supabase row sync: pure engine + transport adapter
 └── utils/         # Generic helpers (date/currency formatting, etc.)
 ```
+
+Web-supported files use `name.web.tsx` / `name.native.tsx` (or `.web.ts`)
+platform variants so a single import resolves correctly on Android and in the
+desktop web build. Do not branch on `Platform.OS` inside a shared component
+where a `.web` variant is the cleaner solution.
 
 Platform-specific modules are written as `name.android.tsx` / `name.web.tsx`
 pairs (or `.native.ts` / `.web.ts`), so the same import resolves correctly on
@@ -91,6 +96,21 @@ where a `.web` variant is the cleaner solution.
 - Use a single database file via expo-sqlite.
 - Schema changes require a migration: a numbered migration appended to
   `src/database/migrations.ts`. Never mutate an existing migration.
+- Sync-related schema changes are **additive and go in a new numbered
+  migration** (e.g. Migration 2). Never modify Migration 1. Additive rules:
+  - Every sync-facing data table gets `uuid TEXT` and `updated_at TEXT`
+    columns plus a `uuid` UNIQUE index. `uuid` is stable across devices and is
+    the sync identity; the local integer `id` stays device-scoped.
+  - New tables: `sync_state` (Supabase URL + anon key + enabled flag + last
+    sync watermark), `sync_outbox` (local changes pending upload), and
+    `sync_tombstones` (deletes to propagate).
+  - Change-capture is via SQLite triggers (INSERT/UPDATE/DELETE) that append
+    to `sync_outbox` / `sync_tombstones` and bump `updated_at`. Triggers are
+    IDEMPOTENT and guarded (no re-logging on pull-applied writes).
+- Pulling rows reuses local integer `id` CPK but rewrites foreign keys: build
+  a remote-uuid → local-id map during apply and rewrite child FK references
+  (e.g. `budget_id` on `transactions`, `fixed_expense_id` on
+  `month_fixed_expenses`). Never write a folder-coded parent id.
 - Queries are small named functions in `src/database/queries.ts` grouped by domain.
 - One repository module per aggregate: `months.ts`, `fixedExpenses.ts`,
   `budgets.ts`, `transactions.ts`, `settings.ts`, `reserve.ts`.
@@ -168,5 +188,7 @@ A task is done only when ALL of the following hold:
 1. Feature matches the specification in `idea.txt`.
 2. Unit tests for all new/changed business logic pass (`npm test`).
 3. TypeScript compiles with no errors (`npx tsc --noEmit`).
-4. The app runs in the Android emulator without warnings caused by your code.
+4. The app runs in the Android emulator without warnings caused by your code,
+   AND the desktop web build compiles with no errors caused by your code
+   (`npx expo export --platform web`).
 5. No lint errors (`npx expo lint` if configured).

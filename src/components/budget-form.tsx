@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, List, Switch, TextInput } from 'react-native-paper';
+import { Button, List, Switch, Text, TextInput } from 'react-native-paper';
 import type { Budget } from '../models';
 import { AmountInput } from './amount-input';
+import { useAppTheme } from '../theme';
 
 export type BudgetDraft = Omit<Budget, 'id' | 'sortOrder'> & { sortOrder: number };
 
@@ -19,9 +20,31 @@ export function BudgetForm({ initialData, currencySymbol, submitting, onSubmit }
     initialData?.defaultAmountCents ?? null
   );
   const [active, setActive] = useState(initialData?.active ?? true);
+  const [amountError, setAmountError] = useState<string | null>(null);
+  const theme = useAppTheme();
 
-  const canSubmit =
-    name.trim().length > 0 && defaultAmountCents !== null && defaultAmountCents >= 0;
+  const hasName = name.trim().length > 0;
+
+  function handleSubmit() {
+    setAmountError(null);
+    if (!hasName) {
+      return;
+    }
+    if (defaultAmountCents === null) {
+      setAmountError('Enter a valid amount.');
+      return;
+    }
+    if (defaultAmountCents < 0) {
+      setAmountError('Amount cannot be negative.');
+      return;
+    }
+    onSubmit({
+      name: name.trim(),
+      defaultAmountCents,
+      active,
+      sortOrder: initialData?.sortOrder ?? 0,
+    });
+  }
 
   return (
     <View style={styles.container}>
@@ -37,6 +60,7 @@ export function BudgetForm({ initialData, currencySymbol, submitting, onSubmit }
         value={defaultAmountCents}
         onChange={setDefaultAmountCents}
         prefix={currencySymbol}
+        error={amountError}
       />
       <List.Item
         title="Active"
@@ -45,23 +69,18 @@ export function BudgetForm({ initialData, currencySymbol, submitting, onSubmit }
       />
       <Button
         mode="contained"
-        onPress={() => {
-          if (!canSubmit || defaultAmountCents === null) {
-            return;
-          }
-          onSubmit({
-            name: name.trim(),
-            defaultAmountCents,
-            active,
-            sortOrder: initialData?.sortOrder ?? 0,
-          });
-        }}
-        disabled={!canSubmit || submitting}
+        onPress={handleSubmit}
+        disabled={submitting}
         loading={submitting}
         style={styles.submit}
       >
         Save
       </Button>
+      {!hasName ? (
+        <Text variant="bodySmall" style={[styles.generalError, { color: theme.colors.error }]}>
+          Enter a name.
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -74,6 +93,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   submit: {
+    marginTop: 8,
+  },
+  generalError: {
     marginTop: 8,
   },
 });

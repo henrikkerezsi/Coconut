@@ -22,6 +22,7 @@ export default function FixedExpensesScreen() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [actualId, setActualId] = useState<number | null>(null);
   const [actualDraft, setActualDraft] = useState<number | null>(null);
+  const [actualError, setActualError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const theme = useAppTheme();
 
@@ -61,6 +62,7 @@ export default function FixedExpensesScreen() {
                 )}
                 onPress={() => {
                   setActualDraft(status.instance.actualAmountCents);
+                  setActualError(null);
                   setActualId(status.instance.id);
                 }}
               />
@@ -107,6 +109,7 @@ export default function FixedExpensesScreen() {
                 value={actualDraft}
                 onChange={setActualDraft}
                 prefix={symbol}
+                error={actualError}
               />
               <PaperText variant="bodySmall" style={styles.dialogHint}>
                 Leave empty to keep the planned estimate for {targeted ? shortMonthLabel(targeted.instance.monthKey) : 'this month'}.
@@ -118,6 +121,10 @@ export default function FixedExpensesScreen() {
                 title="Save"
                 onPress={async () => {
                   if (actualId === null) {
+                    return;
+                  }
+                  if (actualDraft === null || actualDraft <= 0) {
+                    setActualError('Enter a valid amount.');
                     return;
                   }
                   setSaving(true);

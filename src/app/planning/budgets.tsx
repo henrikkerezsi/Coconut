@@ -23,6 +23,7 @@ export default function BudgetsScreen() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [planned, setPlanned] = useState<BudgetWithStatus | null>(null);
   const [plannedDraft, setPlannedDraft] = useState<number | null>(null);
+  const [plannedError, setPlannedError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   if (!ready) {
@@ -54,6 +55,7 @@ export default function BudgetsScreen() {
                 )}
                 onPress={() => {
                   setPlannedDraft(status.plannedCents);
+                  setPlannedError(null);
                   setPlanned(status);
                 }}
               />
@@ -98,6 +100,7 @@ export default function BudgetsScreen() {
                 value={plannedDraft}
                 onChange={setPlannedDraft}
                 prefix={symbol}
+                error={plannedError}
               />
               <PaperText variant="bodySmall" style={styles.dialogHint}>
                 Only affects the current month.
@@ -108,9 +111,13 @@ export default function BudgetsScreen() {
               <List.Item
                 title="Save"
                 onPress={async () => {
+                  if (plannedDraft === null) {
+                    setPlannedError('Enter a valid amount.');
+                    return;
+                  }
                   setSaving(true);
                   try {
-                    if (planned.monthBudgetId !== null && plannedDraft !== null) {
+                    if (planned.monthBudgetId !== null) {
                       await setBudgetPlanned(planned.monthBudgetId, plannedDraft);
                     }
                   } finally {

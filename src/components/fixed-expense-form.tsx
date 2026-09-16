@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, List, Menu, SegmentedButtons, Switch, TextInput } from 'react-native-paper';
+import { Button, List, Menu, SegmentedButtons, Switch, Text, TextInput } from 'react-native-paper';
 import type {
   EstimationStrategy,
   FixedExpense,
   FixedExpenseKind,
 } from '../models';
 import { AmountInput } from './amount-input';
+import { useAppTheme } from '../theme';
 
 export type FixedExpenseDraft = Omit<FixedExpense, 'id' | 'sortOrder'> & { sortOrder: number };
 
@@ -45,21 +46,29 @@ export function FixedExpenseForm({ initialData, currencySymbol, submitting, onSu
   );
   const [active, setActive] = useState(initialData?.active ?? true);
   const [strategyMenu, setStrategyMenu] = useState(false);
+  const [amountError, setAmountError] = useState<string | null>(null);
+  const theme = useAppTheme();
 
   const isVariable = kind === 'variable';
   const averageMonthsNumber = Number(averageMonths);
-  const canSubmit =
-    name.trim().length > 0 &&
-    expectedAmountCents !== null &&
-    expectedAmountCents >= 0 &&
-    (!isVariable ||
-      strategy !== 'average' ||
-      (Number.isInteger(averageMonthsNumber) && averageMonthsNumber > 0));
+  const hasName = name.trim().length > 0;
+  const hasAverageMonths =
+    !isVariable || strategy !== 'average' || (Number.isInteger(averageMonthsNumber) && averageMonthsNumber > 0);
 
   function handleSubmit() {
-    if (!canSubmit || expectedAmountCents === null) {
+    setAmountError(null);
+    if (!hasName || !hasAverageMonths) {
       return;
     }
+    if (expectedAmountCents === null) {
+      setAmountError('Enter a valid amount.');
+      return;
+    }
+    if (expectedAmountCents < 0) {
+      setAmountError('Amount cannot be negative.');
+      return;
+    }
+    setAmountError(null);
     onSubmit({
       name: name.trim(),
       expectedAmountCents,
@@ -87,6 +96,7 @@ export function FixedExpenseForm({ initialData, currencySymbol, submitting, onSu
         value={expectedAmountCents}
         onChange={setExpectedAmountCents}
         prefix={currencySymbol}
+        error={amountError}
       />
 
       <SegmentedButtons
@@ -147,12 +157,21 @@ export function FixedExpenseForm({ initialData, currencySymbol, submitting, onSu
       <Button
         mode="contained"
         onPress={handleSubmit}
-        disabled={!canSubmit || submitting}
+        disabled={submitting}
         loading={submitting}
         style={styles.submit}
       >
         Save
       </Button>
+      {!hasName || !hasAverageMonths ? (
+        <Text variant="bodySmall" style={[styles.generalError, { color: theme.colors.error }]}>
+          {!hasName
+            ? 'Enter a name.'
+            : !hasAverageMonths
+              ? 'Months to average must be a whole number greater than zero.'
+              : null}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -165,6 +184,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   submit: {
+    marginTop: 8,
+  },
+  generalError: {
     marginTop: 8,
   },
 });

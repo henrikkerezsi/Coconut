@@ -17,9 +17,11 @@ import { formatCents } from '../../utils/currency';
 import { shortMonthLabel } from '../../utils/date';
 import { StatCard } from '../../components/stat-card';
 import { LoadingScreen } from '../../components/loading-screen';
+import { useAppTheme } from '../../theme';
 
 export default function StatisticsScreen() {
   const { ready, settings, budgets } = useAppData();
+  const theme = useAppTheme();
   const [records, setRecords] = useState<ClosedMonthRecord[]>([]);
   const [categories, setCategories] = useState<CategoryPerformance[]>([]);
   const [allTimeByCategory, setAllTimeByCategory] = useState<Map<number, number>>(
@@ -140,13 +142,13 @@ export default function StatisticsScreen() {
                 <View key={category.budgetId} style={styles.budgetRow}>
                   <View style={styles.historyRow}>
                     <Text variant="bodyMedium">{category.name}</Text>
-                    <Text variant="bodySmall" style={over ? styles.overText : undefined}>
+                    <Text variant="bodySmall" style={{ color: over ? theme.semantic.overBudget : theme.colors.onSurfaceVariant }}>
                       {formatCents(category.spentCents, symbol)} / {formatCents(category.plannedCents, symbol)}
                     </Text>
                   </View>
                   <ProgressBar
                     progress={Math.min(fraction, 1)}
-                    color={over ? '#c62828' : undefined}
+                    color={over ? theme.semantic.overBudget : undefined}
                     style={styles.progress}
                   />
                 </View>
@@ -194,8 +196,5 @@ const styles = StyleSheet.create({
   progress: {
     marginTop: 4,
     borderRadius: 4,
-  },
-  overText: {
-    color: '#c62828',
   },
 });

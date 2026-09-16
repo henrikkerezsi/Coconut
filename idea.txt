@@ -8,9 +8,14 @@ a monthly spending allowance and a savings reserve.
 The application is intended for a single user and models the user's personal financial
 system. It is not a general-purpose banking or accounting application.
 
-There is no bank integration, backend, account system, cloud synchronization, advertising,
-analytics, or required internet connection. All financial data is stored locally on the
-device in a SQLite database.
+There is no bank integration, account system, advertising, analytics, or any required
+internet connection. All financial data is stored locally on the device in a SQLite
+database that is the single source of truth.
+
+The application is fully usable offline. An optional, opt-in sync to a user-owned
+Supabase project can mirror the local database so it is available on the user's own
+multiple devices. Sync is never required to use the application and never replaces the
+local database as the source of truth.
 
 ---
 
@@ -215,6 +220,7 @@ Configuration for:
 - Variable fixed-expense estimation methods.
 - Flexible budgets.
 - Categories.
+- Cloud sync (Supabase).
 - Data backup and restoration.
 - Application preferences.
 
@@ -237,9 +243,12 @@ explicitly edits the historical month.
 
 ---
 
-## 11. Data Storage
+## 11. Data Storage and Cloud Sync
 
-Local structured SQLite database for reliable offline storage.
+### 11.1 Local database as source of truth
+
+All reads and writes go to a local SQLite database on the device. The local database is
+always the source of truth. The application never loads financial data from the cloud.
 
 The database separates persistent configuration from month-specific financial records.
 
@@ -255,17 +264,44 @@ Capabilities:
 Financial calculations are implemented as separate business logic, not embedded in UI
 components.
 
+### 11.2 Optional synchronization to Supabase
+
+The user may enable optional synchronization to their own Supabase project so the same
+personal dataset is available across their own devices.
+
+- Sync is opt-in. Without it the application is completely local and makes no network
+  requests.
+- The local database is always written first, then a background, best-effort sync pushes
+  the changes to Supabase when the network is available. Sync never blocks normal use and
+  never fails local operations.
+- Other devices pull those changes into their own local SQLite database; the app on every
+  device continues to read and write locally only.
+- Sync mirrors row-level changes, not the whole database on every write. Each synced row
+  carries a stable UUID and a timestamp and follows last-write-wins conflict resolution.
+- The Supabase project is owned by the user and used only for this mirror. No third party,
+  tracking, or analytics is involved.
+
+### 11.3 Sync lifecycle
+
+- A write to a local table records the change in a local sync outbox and tombstone log.
+- A sync run pushes the recorded upserts and tombstones to Supabase and pulls any changes
+  made by the user's other devices.
+- Conflicts between devices are resolved by last-write-wins using each row's update
+  timestamp.
+- Sync state (last push position, last pull time, connection status) is stored locally and
+  displayed in Settings.
+
 ---
 
 ## 12. Backup and Restore
 
-All data is local, so the application provides a straightforward local backup mechanism.
+Synchronization and backup are separate features.
 
-- Export complete application data to a portable file.
+- Export complete application data to a portable file (the full SQLite database).
 - Import to restore all data.
 - Backup includes all information required to reconstruct financial history and
   configuration.
-- No cloud service required.
+- Backup works entirely on-device; no cloud service is required for it.
 
 ---
 
@@ -273,14 +309,14 @@ All data is local, so the application provides a straightforward local backup me
 
 - Works completely offline.
 - Stores financial information locally.
-- No network requests for normal operation.
-- No user account.
-- No analytics or tracking.
+- No network requests during normal, non-synced operation.
+- No user account, analytics, or tracking.
 - No advertising.
 - No bank credentials or banking integration.
 - Avoids unnecessary permissions.
 
-No financial information leaves the device.
+Financial information leaves the device only when the user explicitly enables
+synchronization to their own Supabase project; the app never sends data anywhere else.
 
 ---
 
@@ -294,17 +330,38 @@ No financial information leaves the device.
 - React Native Paper (Material Design 3 UI components)
 - dayjs (date handling)
 - Jest + jest-expo (unit testing)
+- @supabase/supabase-js (optional cloud sync mirror only)
+- Expo Web / react-native-web (desktop web builds)
 
 Architecture:
-- Business logic, database access, and UI have clear separation.
-- No unnecessary state-management frameworks, backend services, cloud infrastructure,
-  authentication, or architectural complexity.
+- Business logic, database access, sync, and UI have clear separation.
+- Supabase is the only permitted backend and is used exclusively as an optional sync
+  mirror; no other backend, authentication, or analytics is used.
 - Small dependency footprint.
 - Favor Expo-supported functionality.
+- The application must build and run as a local desktop web application and remain
+  structured so a future native desktop app can reuse the same code with minimal work.
 
 ---
 
-## 15. Design Philosophy
+## 15. Desktop and Web
+
+Coconut targets Android first, but the code must also compile as a desktop web
+application that runs locally.
+
+- The web build is a standard Expo Web (react-native-web) single-page build that can be
+  served and opened locally.
+- expo-sqlite supports web via a WebAssembly SQLite build, so the same database layer and
+  the same sync logic run on desktop web without platform-specific forks.
+- Native-only capabilities (file sharing, native date pickers) are isolated behind
+  platform-safe wrappers so the web build always compiles and degrades gracefully.
+- The UI and services layers must stay platform-agnostic. Keeping the database, sync, and
+  services layers free of platform bindings is what makes a future desktop app simple: the
+  same modules can be packaged with the desktop runtime of choice.
+
+---
+
+## 16. Design Philosophy
 
 Focused personal tool, not a commercial banking application.
 
@@ -316,15 +373,16 @@ Priorities:
 5. Clear separation between planned and actual spending.
 6. Easy understanding of the savings-reserve effect.
 7. Useful historical information without overwhelming the user.
-8. Complete offline functionality and strong privacy.
-9. Minimal unnecessary complexity.
+8. Complete offline functionality and strong privacy by default.
+9. Optional multi-device sync that never compromises local-first behavior.
+10. Minimal unnecessary complexity.
 
 The user should be able to open the application and understand the current financial
 situation within a few seconds.
 
 ---
 
-## 16. Project Structure
+## 17. Project Structure
 
     Coconut/
     ├── idea.txt              This file
@@ -336,9 +394,10 @@ situation within a few seconds.
     ├── src/
     │   ├── app/              Expo Router screens and layouts
     │   ├── components/       Reusable UI components
-    │   ├── database/         Schema, migrations, queries
+    │   ├── database/         Schema, migrations, queries, repositories
     │   ├── models/           TypeScript types and interfaces
     │   ├── services/         Business logic and calculations
+    │   ├── sync/             Sync engine, transport, conflict resolution
     │   └── utils/            Helper functions
     ├── tests/                Unit tests
-    └── build/                Build outputs (APK)
+    └── build/                Build outputs (APK, web/desktop)

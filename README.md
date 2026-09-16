@@ -1,5 +1,9 @@
 # Coconut
 
+<p align="center">
+  <img src="assets/coconut-banner.webp" alt="Coconut — budget tracking app" width="640">
+</p>
+
 A private, offline-first Android budget management app built around a monthly spending
 allowance and a savings reserve.
 

@@ -3,6 +3,7 @@ import { StyleSheet } from 'react-native';
 import { Button, List, Modal, Portal, RadioButton, Text } from 'react-native-paper';
 import type { Budget } from '../models';
 import { formatCents } from '../utils/currency';
+import { useAppTheme } from '../theme';
 
 interface BudgetSelectProps {
   budgets: Budget[];
@@ -13,6 +14,7 @@ interface BudgetSelectProps {
 
 export function BudgetSelect({ budgets, selectedId, onSelect, symbol = '' }: BudgetSelectProps) {
   const [visible, setVisible] = useState(false);
+  const theme = useAppTheme();
   const selected = budgets.find((budget) => budget.id === selectedId);
 
   return (
@@ -24,7 +26,7 @@ export function BudgetSelect({ budgets, selectedId, onSelect, symbol = '' }: Bud
         onPress={() => setVisible(true)}
       />
       <Portal>
-        <Modal visible={visible} onDismiss={() => setVisible(false)} contentContainerStyle={styles.modal}>
+        <Modal visible={visible} onDismiss={() => setVisible(false)} contentContainerStyle={[styles.modal, { backgroundColor: theme.colors.surface }]}>
           <Text variant="titleMedium" style={styles.title}>
             Category
           </Text>
@@ -51,7 +53,6 @@ export function BudgetSelect({ budgets, selectedId, onSelect, symbol = '' }: Bud
 
 const styles = StyleSheet.create({
   modal: {
-    backgroundColor: 'white',
     marginHorizontal: 24,
     borderRadius: 12,
     padding: 16,

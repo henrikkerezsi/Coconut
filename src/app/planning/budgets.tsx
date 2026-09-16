@@ -7,9 +7,11 @@ import { formatCents } from '../../utils/currency';
 import { LoadingScreen } from '../../components/loading-screen';
 import { AmountInput } from '../../components/amount-input';
 import type { BudgetWithStatus } from '../../data/DataProvider';
+import { useAppTheme } from '../../theme';
 
 export default function BudgetsScreen() {
   const router = useRouter();
+  const theme = useAppTheme();
   const {
     ready,
     settings,
@@ -135,7 +137,7 @@ export default function BudgetsScreen() {
               <List.Item title="Cancel" onPress={() => setDeleteId(null)} />
               <List.Item
                 title="Delete"
-                titleStyle={styles.deleteTitle}
+                titleStyle={{ color: theme.semantic.delete }}
                 onPress={async () => {
                   if (deleteId === null) {
                     return;
@@ -183,8 +185,5 @@ const styles = StyleSheet.create({
   dialogHint: {
     marginTop: 8,
     opacity: 0.6,
-  },
-  deleteTitle: {
-    color: '#c62828',
   },
 });

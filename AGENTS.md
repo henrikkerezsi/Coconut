@@ -7,8 +7,14 @@ Read `idea.txt` for the full product and architecture specification.
 
 ## 1. Project Overview
 
-Coconut is a private, offline-first Android budget management app.
-Single user. No network. No backend. Local SQLite storage.
+Coconut is a private, offline-first budget management app for Android and
+desktop/web. Single user. Local SQLite storage is the single source of truth;
+the app works fully offline with no network.
+
+Optional sync: the user's own Supabase project is the ONLY permitted backend,
+and only for optional, opt-in row-level synchronization (see `idea.txt`
+§11.2 / 11.3). It is local-first: with sync disabled the app makes zero network
+requests. Supabase URL + anon key are configured in-app (never hardcoded).
 
 Tech stack (mandatory, do not deviate without explicit user approval):
 - React Native via Expo SDK
@@ -18,10 +24,15 @@ Tech stack (mandatory, do not deviate without explicit user approval):
 - React Native Paper (Material Design 3) for UI components
 - dayjs for date handling
 - Jest + jest-expo + @testing-library/react-native for tests
+- @supabase/supabase-js (optional, only the Supabase sync transport)
+- react-native-web + react-dom (desktop/web build support)
 
-Forbidden additions: Redux/MobX/Zustand-style state frameworks, backend services,
-cloud infrastructure, authentication, ads, analytics, react-native-vector-icons
-(use @expo/vector-icons which ships with Expo).
+Forbidden additions: Redux/MobX/Zustand-style state frameworks, ads, analytics,
+authentication beyond Supabase anonymous mode, and any backend/cloud service
+OTHER than a user-configured Supabase project. Never hardcode credentials;
+Supabase URL + anon key are entered in the in-app Settings screen. Also
+forbidden: react-native-vector-icons (use @expo/vector-icons which ships with
+Expo).
 
 ---
 
@@ -49,8 +60,14 @@ src/
 ├── database/      # SQLite schema, migrations, and data-access layer
 ├── models/        # TypeScript types and interfaces (domain model)
 ├── services/      # Business logic / financial calculations (pure TS)
+├── sync/          # Option-al Supabase row sync: pure engine + transport
 └── utils/         # Generic helpers (date/currency formatting, etc.)
 ```
+
+Platform-specific modules are written as `name.android.tsx` / `name.web.tsx`
+pairs (or `.native.ts` / `.web.ts`), so the same import resolves correctly on
+Android and desktop/web. Do not branch on `Platform.OS` inside shared files
+where a `.web` variant is the cleaner solution.
 
 `tests/` mirrors the structure of `src/` and `src/app/` (Jest convention).
 

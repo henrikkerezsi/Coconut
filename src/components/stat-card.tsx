@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import { Card, Text } from 'react-native-paper';
+import { useAppTheme } from '../theme';
 
 export type Tone = 'neutral' | 'good' | 'bad' | 'attention';
 
@@ -11,14 +12,14 @@ interface StatCardProps {
   tone?: Tone;
 }
 
-const TONE_COLORS: Record<Tone, string> = {
-  neutral: '#666666',
-  good: '#2e7d32',
-  bad: '#c62828',
-  attention: '#e65100',
-};
-
 export function StatCard({ label, value, sub, tone = 'neutral' }: StatCardProps) {
+  const theme = useAppTheme();
+  const TONE_COLORS: Record<Tone, string> = {
+    neutral: theme.colors.onSurfaceVariant,
+    good: theme.semantic.goodBudget,
+    bad: theme.semantic.overBudget,
+    attention: theme.semantic.warning,
+  };
   const color = TONE_COLORS[tone];
   return (
     <Card mode="contained" style={styles.card}>

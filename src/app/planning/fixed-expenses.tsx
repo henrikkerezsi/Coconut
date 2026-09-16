@@ -7,6 +7,7 @@ import { formatCents } from '../../utils/currency';
 import { shortMonthLabel } from '../../utils/date';
 import { LoadingScreen } from '../../components/loading-screen';
 import { AmountInput } from '../../components/amount-input';
+import { useAppTheme } from '../../theme';
 
 export default function FixedExpensesScreen() {
   const router = useRouter();
@@ -22,6 +23,7 @@ export default function FixedExpensesScreen() {
   const [actualId, setActualId] = useState<number | null>(null);
   const [actualDraft, setActualDraft] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const theme = useAppTheme();
 
   if (!ready) {
     return <LoadingScreen />;
@@ -145,7 +147,7 @@ export default function FixedExpensesScreen() {
               <List.Item title="Cancel" onPress={() => setDeleteId(null)} />
               <List.Item
                 title="Delete"
-                titleStyle={styles.deleteTitle}
+                titleStyle={{ color: theme.semantic.delete }}
                 onPress={async () => {
                   if (deleteId === null) {
                     return;
@@ -196,8 +198,5 @@ const styles = StyleSheet.create({
   dialogHint: {
     marginTop: 8,
     opacity: 0.6,
-  },
-  deleteTitle: {
-    color: '#c62828',
   },
 });

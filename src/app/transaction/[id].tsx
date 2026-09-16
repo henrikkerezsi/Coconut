@@ -7,10 +7,12 @@ import { getTransaction } from '../../database/transactions';
 import { useAppData } from '../../data/DataProvider';
 import { TransactionForm } from '../../components/transaction-form';
 import { LoadingScreen } from '../../components/loading-screen';
+import { useAppTheme } from '../../theme';
 
 export default function EditTransactionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { budgets, settings, saveTransaction, removeTransaction, suggestBudgets } = useAppData();
+  const theme = useAppTheme();
   const router = useRouter();
   const [transaction, setTransaction] = useState<Transaction | null>(null);
 
@@ -41,7 +43,7 @@ export default function EditTransactionScreen() {
       <View style={styles.deleteRow}>
         <Button
           mode="text"
-          textColor="#c62828"
+          textColor={theme.semantic.delete}
           onPress={() => {
             removeTransaction(transaction.id).then(() => router.back());
           }}

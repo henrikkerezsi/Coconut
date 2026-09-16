@@ -6,9 +6,11 @@ import { formatCents } from '../../utils/currency';
 import { currentMonthKey, monthLabel } from '../../utils/date';
 import { StatCard, type Tone } from '../../components/stat-card';
 import { LoadingScreen } from '../../components/loading-screen';
+import { useAppTheme } from '../../theme';
 
 export default function OverviewScreen() {
   const { ready, settings, currentDashboard, currentMonth } = useAppData();
+  const theme = useAppTheme();
 
   if (!ready) {
     return <LoadingScreen />;
@@ -49,7 +51,7 @@ export default function OverviewScreen() {
           </View>
           <View style={styles.row}>
             <Text variant="bodyMedium">Reserve adjustment</Text>
-            <Text variant="bodyMedium" style={{ color: adjustmentTone === 'bad' ? '#c62828' : adjustmentTone === 'good' ? '#2e7d32' : undefined }}>
+            <Text variant="bodyMedium" style={{ color: adjustmentTone === 'bad' ? theme.semantic.overBudget : adjustmentTone === 'good' ? theme.semantic.goodBudget : undefined }}>
               {reserveProjection.adjustmentCents > 0 ? '+' : ''}
               {formatCents(reserveProjection.adjustmentCents, symbol)}
             </Text>
@@ -123,14 +125,14 @@ export default function OverviewScreen() {
                 <View key={budget.id} style={styles.budgetRow}>
                   <View style={styles.row}>
                     <Text variant="bodyMedium">{budget.name}</Text>
-                    <Text variant="bodySmall" style={over ? styles.overText : undefined}>
+                    <Text variant="bodySmall" style={{ color: over ? theme.semantic.overBudget : theme.colors.onSurfaceVariant }}>
                       {formatCents(status.spentCents, symbol)} / {formatCents(status.plannedCents, symbol)}
                       {over ? ' • over' : ''}
                     </Text>
                   </View>
                   <ProgressBar
                     progress={Math.min(fraction, 1)}
-                    color={over ? '#c62828' : undefined}
+                    color={over ? theme.semantic.overBudget : undefined}
                     style={styles.progress}
                   />
                 </View>
@@ -187,8 +189,5 @@ const styles = StyleSheet.create({
   progress: {
     marginTop: 4,
     borderRadius: 4,
-  },
-  overText: {
-    color: '#c62828',
   },
 });

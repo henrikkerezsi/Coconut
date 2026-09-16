@@ -8,6 +8,7 @@ import { DateField } from './date-field';
 import { DAYJS_STORE_DATE_FORMAT } from '../utils/date';
 import dayjs from 'dayjs';
 import type { TransactionInput } from '../database/transactions';
+import { useAppTheme } from '../theme';
 
 interface TransactionFormProps {
   initial?: Transaction;
@@ -32,6 +33,7 @@ export function TransactionForm({
   const [suggestions, setSuggestions] = useState<MerchantSuggestion[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const theme = useAppTheme();
 
   useEffect(() => {
     const trimmed = merchant.trim();
@@ -125,7 +127,7 @@ export function TransactionForm({
         Save
       </Button>
       {error ? (
-        <Text variant="bodySmall" style={styles.error}>
+        <Text variant="bodySmall" style={[styles.error, { color: theme.colors.error }]}>
           {error}
         </Text>
       ) : null}
@@ -155,7 +157,6 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   error: {
-    color: '#c62828',
     marginTop: 8,
   },
 });

@@ -1,25 +1,70 @@
-import React, { useMemo, useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
+import { SectionList, StyleSheet, View } from 'react-native';
+import { Tabs, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { FAB, List, Searchbar, Text } from 'react-native-paper';
-import { useAppData } from '../../data/DataProvider';
+import { ActivityIndicator, FAB, List, Searchbar, Text } from 'react-native-paper';
+import { useAppData, type MonthDashboard } from '../../data/DataProvider';
 import { formatCents } from '../../utils/currency';
-import { relativeDayLabel } from '../../utils/date';
+import { currentMonthKey, relativeDayLabel } from '../../utils/date';
 import { LoadingScreen } from '../../components/loading-screen';
 import { EmptyState } from '../../components/empty-state';
 import { useAppTheme } from '../../theme';
 import { ScreenFade } from '../../components/screen-fade';
 import { FadeIn } from '../../components/fade-in';
+import { MonthSwitcher } from '../../components/month-switcher';
+import type { MonthKey, Transaction } from '../../models';
+
+interface TransactionSection {
+  title: string;
+  data: Transaction[];
+}
 
 export default function TransactionsScreen() {
-  const { ready, settings, currentDashboard } = useAppData();
+  const { ready, settings, currentDashboard, dashboardFor } = useAppData();
   const router = useRouter();
   const theme = useAppTheme();
   const [query, setQuery] = useState('');
+  const todayMonthKey = currentMonthKey();
+  const [monthKey, setMonthKey] = useState<MonthKey>(todayMonthKey);
+  const [monthDashboard, setMonthDashboard] = useState<MonthDashboard | null>(currentDashboard);
+  const [loadingMonth, setLoadingMonth] = useState(false);
+
+  const viewingCurrentMonth = monthKey === todayMonthKey;
+
+  useEffect(() => {
+    if (viewingCurrentMonth) {
+      return;
+    }
+    let active = true;
+    dashboardFor(monthKey)
+      .then((dashboard) => {
+        if (active) {
+          setMonthDashboard(dashboard);
+          setLoadingMonth(false);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setMonthDashboard(null);
+          setLoadingMonth(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [monthKey, viewingCurrentMonth, currentDashboard, dashboardFor]);
+
+  const changeMonth = (next: MonthKey) => {
+    if (next !== monthKey) {
+      setMonthKey(next);
+      setMonthDashboard(null);
+      setLoadingMonth(next !== todayMonthKey);
+    }
+  };
+
+  const dashboard = viewingCurrentMonth ? currentDashboard : monthDashboard;
 
   const filtered = useMemo(() => {
-    const dashboard = currentDashboard;
     if (!dashboard) {
       return [];
     }
@@ -35,23 +80,42 @@ export default function TransactionsScreen() {
         .includes(normalized);
       return merchantMatch || noteMatch || budgetMatch;
     });
-  }, [query, currentDashboard]);
+  }, [query, dashboard]);
 
-  if (!ready) {
-    return <LoadingScreen />;
-  }
+  const sections = useMemo<TransactionSection[]>(() => {
+    const groups: TransactionSection[] = [];
+    for (const transaction of filtered) {
+      const last = groups[groups.length - 1];
+      if (last && last.data[last.data.length - 1].date === transaction.date) {
+        last.data.push(transaction);
+      } else {
+        groups.push({ title: relativeDayLabel(transaction.date), data: [transaction] });
+      }
+    }
+    return groups;
+  }, [filtered]);
 
-  const total = currentDashboard?.transactions.reduce(
+  const total = dashboard?.transactions.reduce(
     (sum, transaction) => sum + transaction.amountCents,
     0
   ) ?? 0;
 
   return (
     <ScreenFade>
-      <View style={styles.container}>
+      <Tabs.Screen
+        options={{
+          headerRight: () => (
+            <MonthSwitcher value={monthKey} onChange={changeMonth} max={todayMonthKey} />
+          ),
+        }}
+      />
+      {!ready ? (
+        <LoadingScreen />
+      ) : (
+        <View style={styles.container}>
         <Text style={styles.header} variant="titleMedium">
-          {currentDashboard ? `${currentDashboard.transactions.length} transactions` : ''}
-          {currentDashboard && currentDashboard.transactions.length > 0
+          {dashboard ? `${dashboard.transactions.length} transactions` : ''}
+          {dashboard && dashboard.transactions.length > 0
             ? ` • ${formatCents(total, settings.currencySymbol)}`
             : ''}
         </Text>
@@ -61,52 +125,73 @@ export default function TransactionsScreen() {
           onChangeText={setQuery}
           style={styles.search}
         />
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => String(item.id)}
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={
-            <EmptyState
-              icon={<Text variant="displaySmall">🛒</Text>}
-              message={
-                query.trim().length > 0
-                  ? 'No transactions match your search.'
-                  : 'No transactions this month yet.'
-              }
-              actionLabel={query.trim().length > 0 ? undefined : 'Add a transaction'}
-              onAction={query.trim().length > 0 ? undefined : () => router.push('/transaction/new')}
-            />
-          }
-          renderItem={({ item }) => (
-            <FadeIn>
-              <List.Item
-                title={item.merchant}
-                description={`${relativeDayLabel(item.date)}${item.note ? ` • ${item.note}` : ''}`}
-                left={(props) => <List.Icon {...props} icon="cash" />}
-                right={(props) => (
-                  <View style={styles.right}>
-                    <Text variant="bodyLarge">{formatCents(item.amountCents, settings.currencySymbol)}</Text>
-                    <Text variant="labelSmall" style={styles.budgetLabel}>
-                      {currentDashboard?.budgetNames.get(item.budgetId ?? -1) ?? ''}
-                    </Text>
-                    {item.attachmentName ? (
-                      <MaterialCommunityIcons
-                        name="paperclip"
-                        size={14}
-                        color={theme.colors.outline}
-                        style={styles.paperclip}
-                      />
-                    ) : null}
-                  </View>
-                )}
-                style={[styles.row, { borderRadius: theme.radii.medium }]}
-                onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: String(item.id) } })}
+        {loadingMonth ? (
+          <ActivityIndicator size="small" style={styles.spinner} />
+        ) : (
+          <SectionList
+            sections={sections}
+            keyExtractor={(item) => String(item.id)}
+            stickySectionHeadersEnabled={false}
+            contentContainerStyle={styles.listContent}
+            ListEmptyComponent={
+              <EmptyState
+                icon={<Text variant="displaySmall">🛒</Text>}
+                message={
+                  query.trim().length > 0
+                    ? 'No transactions match your search.'
+                    : viewingCurrentMonth
+                      ? 'No transactions this month yet.'
+                      : 'No transactions in this month.'
+                }
+                actionLabel={
+                  query.trim().length > 0 || !viewingCurrentMonth ? undefined : 'Add a transaction'
+                }
+                onAction={
+                  query.trim().length > 0 || !viewingCurrentMonth
+                    ? undefined
+                    : () => router.push('/transaction/new')
+                }
               />
-            </FadeIn>
-          )}
-        />
-        <FAB icon="plus" style={styles.fab} onPress={() => router.push('/transaction/new')} />
-      </View>
+            }
+            renderSectionHeader={({ section }) => (
+              <Text style={[styles.sectionHeader, { color: theme.text.secondary }]}>
+                {`--- ${section.title} ---`}
+              </Text>
+            )}
+            renderItem={({ item }) => (
+              <FadeIn>
+                <List.Item
+                  title={item.merchant}
+                  description={item.note ?? undefined}
+                  left={(props) => <List.Icon {...props} icon="cash" />}
+                  right={(props) => (
+                    <View style={styles.right}>
+                      <Text variant="bodyLarge">{formatCents(item.amountCents, settings.currencySymbol)}</Text>
+                      <Text variant="labelSmall" style={styles.budgetLabel}>
+                        {dashboard?.budgetNames.get(item.budgetId ?? -1) ?? ''}
+                      </Text>
+                      {item.attachmentName ? (
+                        <MaterialCommunityIcons
+                          name="paperclip"
+                          size={14}
+                          color={theme.colors.outline}
+                          style={styles.paperclip}
+                        />
+                      ) : null}
+                    </View>
+                  )}
+                  style={[styles.row, { borderRadius: theme.radii.medium }]}
+                  onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: String(item.id) } })}
+                />
+              </FadeIn>
+            )}
+          />
+        )}
+        {viewingCurrentMonth ? (
+          <FAB icon="plus" style={styles.fab} onPress={() => router.push('/transaction/new')} />
+        ) : null}
+        </View>
+      )}
     </ScreenFade>
   );
 }
@@ -123,6 +208,18 @@ const styles = StyleSheet.create({
   search: {
     margin: 12,
     marginBottom: 4,
+  },
+  sectionHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 4,
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 1,
+  },
+  spinner: {
+    marginTop: 24,
   },
   listContent: {
     paddingBottom: 96,

@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { CoconutThemeProvider, useAppTheme } from '../theme';
 import { buildNavigationTheme } from '../theme/navigation';
 import { DataProvider, useAppData } from '../data/DataProvider';
+import { UpdateNotifier } from '../components/update-notifier';
 
 function ThemedContent() {
   const theme = useAppTheme();
@@ -80,6 +81,7 @@ function ThemedContent() {
             options={{ title: 'Backup & Restore' }}
           />
         </Stack>
+        <UpdateNotifier />
       </PaperProvider>
     </ThemeProvider>
   );

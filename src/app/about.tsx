@@ -6,8 +6,7 @@ import dayjs from 'dayjs';
 import { CoconutLogo } from '../components/coconut-logo';
 import { useAppTheme } from '../theme';
 import { releaseInfo } from '../config/release-info';
-
-const GITHUB_URL = 'https://github.com/henrikkerezsi/Coconut';
+import { GITHUB_REPO_URL } from '../config/repository';
 
 export default function AboutScreen() {
   const router = useRouter();
@@ -24,7 +23,7 @@ export default function AboutScreen() {
 
   const openGitHub = async () => {
     try {
-      await Linking.openURL(GITHUB_URL);
+      await Linking.openURL(GITHUB_REPO_URL);
     } catch {
       Alert.alert('Could not open the link');
     }
@@ -65,7 +64,7 @@ export default function AboutScreen() {
           />
           <List.Item
             title="GitHub"
-            description={GITHUB_URL}
+            description={GITHUB_REPO_URL}
             left={(props) => (
               <List.Icon {...props} icon="github" color={theme.colors.primary} />
             )}

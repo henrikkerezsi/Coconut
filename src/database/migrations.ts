@@ -61,4 +61,11 @@ CREATE INDEX IF NOT EXISTS idx_yearly_subscriptions_active ON yearly_subscriptio
 CREATE INDEX IF NOT EXISTS idx_yearly_subscriptions_sort ON yearly_subscriptions (sort_order);
 `,
   },
+  {
+    id: 5,
+    description: 'Flexible budget colors',
+    sql: `
+ALTER TABLE budgets ADD COLUMN color TEXT;
+`,
+  },
 ];

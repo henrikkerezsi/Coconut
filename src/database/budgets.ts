@@ -8,6 +8,7 @@ interface BudgetRow {
   default_amount_cents: number;
   active: number;
   sort_order: number;
+  color: string | null;
 }
 
 function rowToBudget(row: BudgetRow): Budget {
@@ -17,6 +18,7 @@ function rowToBudget(row: BudgetRow): Budget {
     defaultAmountCents: row.default_amount_cents,
     active: row.active === 1,
     sortOrder: row.sort_order,
+    color: row.color,
   };
 }
 
@@ -48,9 +50,9 @@ export async function createBudget(
 ): Promise<number> {
   const database = db ?? (await getDatabase());
   const result = await database.runAsync(
-    `INSERT INTO budgets (name, default_amount_cents, active, sort_order)
-     VALUES (?, ?, ?, ?)`,
-    [input.name, input.defaultAmountCents, input.active ? 1 : 0, input.sortOrder]
+    `INSERT INTO budgets (name, default_amount_cents, active, sort_order, color)
+     VALUES (?, ?, ?, ?, ?)`,
+    [input.name, input.defaultAmountCents, input.active ? 1 : 0, input.sortOrder, input.color]
   );
   return result.lastInsertRowId;
 }
@@ -62,8 +64,8 @@ export async function updateBudget(
 ): Promise<void> {
   const database = db ?? (await getDatabase());
   await database.runAsync(
-    'UPDATE budgets SET name = ?, default_amount_cents = ?, active = ?, sort_order = ? WHERE id = ?',
-    [input.name, input.defaultAmountCents, input.active ? 1 : 0, input.sortOrder, id]
+    'UPDATE budgets SET name = ?, default_amount_cents = ?, active = ?, sort_order = ?, color = ? WHERE id = ?',
+    [input.name, input.defaultAmountCents, input.active ? 1 : 0, input.sortOrder, input.color, id]
   );
 }
 

@@ -262,7 +262,13 @@ export default function OverviewScreen() {
                 <List.Item
                   title={tx.merchant}
                   description={relativeDayLabel(tx.date)}
-                  left={(props) => <List.Icon {...props} icon="cash" />}
+                  left={(props) => (
+                    <List.Icon
+                      {...props}
+                      icon="cash"
+                      color={currentDashboard?.budgetColors.get(tx.budgetId ?? -1) ?? undefined}
+                    />
+                  )}
                   right={() => (
                     <View style={styles.transactionRight}>
                       <Text variant="bodyLarge">{formatCents(tx.amountCents, symbol)}</Text>

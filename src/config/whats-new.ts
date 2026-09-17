@@ -7,6 +7,24 @@ export interface WhatsNewEntry {
 
 export const whatsNew: WhatsNewEntry[] = [
   {
+    version: '0.3.1',
+    releasedAt: '2026-09-17T00:00:00.000Z',
+    intro:
+      'The final update in the 0.3 series. Coconut now writes a month-end summary report for every ' +
+      'closed month, walks new users through a quick tutorial and lets you know when a new version ' +
+      'is available. Along the way, budgets can be color-coded, transactions are grouped by day and ' +
+      'you can browse back through earlier months.',
+    features: [
+      'Month-end summary report \u2014 closing a month saves a detailed breakdown of fixed expenses, subscriptions, budgets and how the reserve changed',
+      'Option to view previous months on the transactions screen',
+      'An in-app tutorial that walks you through the app on first launch, replayable from Settings',
+      'Automatic new version notifications when a newer release is available',
+      'Transactions are grouped by date so it\u2019s easy to see what was spent on a given day',
+      'Fixed the initial reserve setting so it actually updates the month\u2019s starting balance',
+      'Assign a color to each flexible budget \u2014 transactions tagged with it get a matching icon',
+    ],
+  },
+  {
     version: '0.3.0',
     releasedAt: '2026-09-17T00:00:00.000Z',
     intro:

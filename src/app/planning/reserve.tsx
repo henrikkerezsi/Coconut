@@ -130,7 +130,7 @@ export default function ReserveScreen() {
         <Card.Content>
           <List.Item
             title="Initial reserve"
-            description="The starting reserve balance used when a month has no history."
+            description="The balance your reserve starts with. Sets this month's starting reserve and the first month when there is no history."
             right={(props) => <List.Icon {...props} icon="chevron-right" />}
             onPress={() => {
               setInitialDraft(settings.initialReserveCents);
@@ -191,6 +191,7 @@ export default function ReserveScreen() {
                 setInitialError(null);
                 await setInitialReserve(initialDraft);
                 setInitialDialog(false);
+                setToast('Reserve balance updated');
               }}
             >
               Save

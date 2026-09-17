@@ -119,6 +119,12 @@ export default function SettingsScreen() {
       <List.Section>
         <List.Subheader>About</List.Subheader>
         <List.Item
+          title="Welcome tour"
+          description="Replay the getting-started walkthrough"
+          left={(props) => <List.Icon {...props} icon="compass-outline" />}
+          onPress={() => router.push('/tutorial')}
+        />
+        <List.Item
           title="What's New"
           description="What changed in each release"
           left={(props) => <List.Icon {...props} icon="creation-outline" />}

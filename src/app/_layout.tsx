@@ -6,6 +6,7 @@ import { CoconutThemeProvider, useAppTheme } from '../theme';
 import { buildNavigationTheme } from '../theme/navigation';
 import { DataProvider, useAppData } from '../data/DataProvider';
 import { UpdateNotifier } from '../components/update-notifier';
+import { AutoTutorial } from '../components/auto-tutorial';
 
 function ThemedContent() {
   const theme = useAppTheme();
@@ -60,6 +61,8 @@ function ThemedContent() {
           />
           <Stack.Screen name="about" options={{ title: 'About', headerShown: false }} />
           <Stack.Screen name="whats-new" options={{ title: "What's New", headerShown: false }} />
+          <Stack.Screen name="monthly-history" options={{ title: 'Monthly History' }} />
+          <Stack.Screen name="monthly-report/[monthKey]" options={{ title: 'Monthly Report' }} />
           <Stack.Screen
             name="planning/fixed-expenses"
             options={{ title: 'Fixed Expenses' }}
@@ -80,8 +83,13 @@ function ThemedContent() {
             name="planning/backup"
             options={{ title: 'Backup & Restore' }}
           />
+          <Stack.Screen
+            name="tutorial"
+            options={{ title: 'Coconut Tour', presentation: 'fullScreenModal', headerShown: false }}
+          />
         </Stack>
         <UpdateNotifier />
+        <AutoTutorial />
       </PaperProvider>
     </ThemeProvider>
   );

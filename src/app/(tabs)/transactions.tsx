@@ -163,7 +163,13 @@ export default function TransactionsScreen() {
                 <List.Item
                   title={item.merchant}
                   description={item.note ?? undefined}
-                  left={(props) => <List.Icon {...props} icon="cash" />}
+                  left={(props) => (
+                    <List.Icon
+                      {...props}
+                      icon="cash"
+                      color={dashboard?.budgetColors.get(item.budgetId ?? -1) ?? undefined}
+                    />
+                  )}
                   right={(props) => (
                     <View style={styles.right}>
                       <Text variant="bodyLarge">{formatCents(item.amountCents, settings.currencySymbol)}</Text>

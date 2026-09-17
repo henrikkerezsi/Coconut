@@ -30,6 +30,7 @@ import {
   materializeMonth,
   reopenMonth as persistReopenMonth,
   updateMonthAllowance,
+  updateMonthStartingReserve,
 } from '../database/months';
 import {
   createFixedExpense,
@@ -102,6 +103,7 @@ export interface MonthDashboard {
   income: Income[];
   subscriptions: YearlySubscription[];
   budgetNames: Map<number, string>;
+  budgetColors: Map<number, string | null>;
 }
 
 interface AppData {
@@ -219,6 +221,7 @@ async function buildDashboard(monthKey: MonthKey): Promise<MonthDashboard | null
     income,
     subscriptions,
     budgetNames: new Map(budgetDefinitions.map((budget) => [budget.id, budget.name])),
+    budgetColors: new Map(budgetDefinitions.map((budget) => [budget.id, budget.color])),
   };
 }
 
@@ -293,6 +296,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setInitialReserve: async (cents) => {
         const db = await getDatabase();
         await updateSettings({ initialReserveCents: cents }, db);
+        if (currentMonth && !currentMonth.isClosed) {
+          await updateMonthStartingReserve(currentMonth.monthKey, cents, db);
+        }
         await refresh();
       },
       setCurrencySymbol: async (symbol) => {

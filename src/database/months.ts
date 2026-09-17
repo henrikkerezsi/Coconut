@@ -193,6 +193,18 @@ export async function updateMonthAllowance(
   ]);
 }
 
+export async function updateMonthStartingReserve(
+  monthKey: MonthKey,
+  startingReserveCents: number,
+  db?: SQLiteDatabase
+): Promise<void> {
+  const database = db ?? (await getDatabase());
+  await database.runAsync('UPDATE months SET starting_reserve_cents = ? WHERE month_key = ?', [
+    startingReserveCents,
+    monthKey,
+  ]);
+}
+
 export async function closeMonth(
   monthKey: MonthKey,
   endingReserveCents: number,

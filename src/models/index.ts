@@ -49,6 +49,7 @@ export interface Budget {
   defaultAmountCents: number;
   active: boolean;
   sortOrder: number;
+  color: string | null;
 }
 
 export interface MonthBudget {

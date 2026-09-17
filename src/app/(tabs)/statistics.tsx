@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Card, List, ProgressBar, Text } from 'react-native-paper';
+import { useRouter } from 'expo-router';
 import { useAppData } from '../../data/DataProvider';
 import type { ClosedMonthRecord, CategoryPerformance } from '../../database/queries';
 import {
@@ -14,7 +15,6 @@ import {
   highestMonthlySpending,
 } from '../../services/statistics-service';
 import { formatCents } from '../../utils/currency';
-import { shortMonthLabel } from '../../utils/date';
 import { StatCard } from '../../components/stat-card';
 import { LoadingScreen } from '../../components/loading-screen';
 import { useAppTheme } from '../../theme';
@@ -24,6 +24,7 @@ import { FadeIn } from '../../components/fade-in';
 export default function StatisticsScreen() {
   const { ready, settings, budgets } = useAppData();
   const theme = useAppTheme();
+  const router = useRouter();
   const [records, setRecords] = useState<ClosedMonthRecord[]>([]);
   const [categories, setCategories] = useState<CategoryPerformance[]>([]);
   const [allTimeByCategory, setAllTimeByCategory] = useState<Map<number, number>>(
@@ -81,32 +82,17 @@ export default function StatisticsScreen() {
       </View>
 
       <Card mode="elevated" style={styles.card}>
-        <Card.Title title="Monthly history" />
-        <Card.Content>
-          {records.length === 0 ? (
-            <Text variant="bodyMedium" style={styles.empty}>
-              Close a month to record its history here.
-            </Text>
-          ) : (
-            records
-              .slice()
-              .reverse()
-              .map((record) => (
-                <FadeIn key={record.monthKey}>
-                  <View style={styles.historyRow}>
-                    <Text variant="bodyMedium">{shortMonthLabel(record.monthKey)}</Text>
-                    <View style={styles.historyRight}>
-                      <Text variant="bodyMedium">{formatCents(record.spendingCents, symbol)}</Text>
-                      <Text variant="labelSmall" style={styles.historyAdjustment}>
-                        {record.reserveAdjustmentCents >= 0 ? '+' : ''}
-                        {formatCents(record.reserveAdjustmentCents, symbol)} reserve
-                      </Text>
-                    </View>
-                  </View>
-                </FadeIn>
-              ))
-          )}
-        </Card.Content>
+        <List.Item
+          title="Monthly history"
+          description={
+            records.length === 0
+              ? 'Close a month to generate its report'
+              : 'Open the report of every closed month'
+          }
+          left={(props) => <List.Icon {...props} icon="calendar-month-outline" />}
+          right={(props) => <List.Icon {...props} icon="chevron-right" />}
+          onPress={() => router.push('/monthly-history')}
+        />
       </Card>
 
       <Card mode="elevated" style={styles.card}>
@@ -193,12 +179,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 6,
-  },
-  historyRight: {
-    alignItems: 'flex-end',
-  },
-  historyAdjustment: {
-    opacity: 0.6,
   },
   budgetRow: {
     marginVertical: 6,

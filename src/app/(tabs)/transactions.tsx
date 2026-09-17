@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { FAB, List, Searchbar, Text } from 'react-native-paper';
 import { useAppData } from '../../data/DataProvider';
 import { formatCents } from '../../utils/currency';
@@ -88,6 +89,14 @@ export default function TransactionsScreen() {
                     <Text variant="labelSmall" style={styles.budgetLabel}>
                       {currentDashboard?.budgetNames.get(item.budgetId ?? -1) ?? ''}
                     </Text>
+                    {item.attachmentName ? (
+                      <MaterialCommunityIcons
+                        name="paperclip"
+                        size={14}
+                        color={theme.colors.outline}
+                        style={styles.paperclip}
+                      />
+                    ) : null}
                   </View>
                 )}
                 style={[styles.row, { borderRadius: theme.radii.medium }]}
@@ -128,6 +137,10 @@ const styles = StyleSheet.create({
   },
   budgetLabel: {
     opacity: 0.6,
+    marginTop: 2,
+  },
+  paperclip: {
+    alignSelf: 'flex-end',
     marginTop: 2,
   },
   fab: {

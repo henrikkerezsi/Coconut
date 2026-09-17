@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Chip, Text, TextInput } from 'react-native-paper';
-import type { Budget, MerchantSuggestion, Transaction } from '../models';
+import type { Attachment, Budget, MerchantSuggestion, Transaction } from '../models';
 import { AmountInput } from './amount-input';
 import { BudgetSelect } from './budget-select';
+import { AttachmentField } from './attachment-field';
 import { DateField } from './date-field';
 import { DAYJS_STORE_DATE_FORMAT } from '../utils/date';
 import dayjs from 'dayjs';
@@ -30,6 +31,15 @@ export function TransactionForm({
   const [note, setNote] = useState(initial?.note ?? '');
   const [budgetId, setBudgetId] = useState<number | null>(initial?.budgetId ?? null);
   const [date, setDate] = useState(initial?.date ?? dayjs().format(DAYJS_STORE_DATE_FORMAT));
+  const [attachment, setAttachment] = useState<Attachment | null>(
+    initial?.attachment
+      ? {
+          name: initial.attachmentName ?? 'attachment',
+          mime: initial.attachmentMime ?? 'application/octet-stream',
+          bytes: initial.attachment,
+        }
+      : null
+  );
   const [suggestions, setSuggestions] = useState<MerchantSuggestion[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +83,7 @@ export function TransactionForm({
         budgetId,
         merchant: merchant.trim(),
         note: note.trim().length > 0 ? note.trim() : null,
+        attachment,
       });
     } finally {
       setSubmitting(false);
@@ -122,6 +133,7 @@ export function TransactionForm({
         onChangeText={setNote}
         style={styles.field}
       />
+      <AttachmentField value={attachment} onChange={setAttachment} />
       <DateField value={date} onChange={setDate} />
       <Button mode="contained" onPress={handleSubmit} loading={submitting} disabled={submitting} style={styles.submit}>
         Save

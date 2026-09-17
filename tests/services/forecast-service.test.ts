@@ -41,6 +41,9 @@ function transaction(amountCents: number): Transaction {
     budgetId: 1,
     merchant: 'Test',
     note: null,
+    attachmentName: null,
+    attachmentMime: null,
+    attachment: null,
   };
 }
 

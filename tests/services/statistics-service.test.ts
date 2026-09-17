@@ -18,6 +18,9 @@ function transaction(budgetId: number | null, amountCents: number, date = '2026-
     budgetId,
     merchant: 'Test',
     note: null,
+    attachmentName: null,
+    attachmentMime: null,
+    attachment: null,
   };
 }
 

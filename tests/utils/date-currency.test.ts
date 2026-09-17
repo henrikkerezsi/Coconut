@@ -5,20 +5,20 @@ import {
 import { monthKeyOf, previousMonthKey, nextMonthKey } from '../../src/utils/date';
 
 describe('formatCents', () => {
-  it('formats cents with a decimal separator', () => {
-    expect(formatCents(123456)).toBe('1,234.56');
+  it('formats cents with European digit grouping', () => {
+    expect(formatCents(123456)).toBe('1.234,56');
   });
 
   it('pads the cent fraction', () => {
-    expect(formatCents(5)).toBe('0.05');
+    expect(formatCents(5)).toBe('0,05');
   });
 
   it('handles negative values', () => {
-    expect(formatCents(-1234)).toBe('-12.34');
+    expect(formatCents(-1234)).toBe('-12,34');
   });
 
-  it('appends a currency symbol when provided', () => {
-    expect(formatCents(123456, '€')).toBe('€1,234.56');
+  it('appends a currency symbol after the amount', () => {
+    expect(formatCents(123456, '€')).toBe('1.234,56 €');
   });
 });
 

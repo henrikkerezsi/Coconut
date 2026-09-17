@@ -5,7 +5,7 @@ import { getDatabase } from './database';
 export const DEFAULT_SETTINGS: Settings = {
   monthlyAllowanceCents: 0,
   initialReserveCents: 0,
-  currencySymbol: '',
+  currencySymbol: '€',
   themeMode: 'system',
   recentTransactionsCount: 5,
 };
@@ -40,7 +40,7 @@ function rowToSettings(
         ] = Number(row.value);
         break;
       case 'currency_symbol':
-        settings.currencySymbol = row.value;
+        settings.currencySymbol = row.value === '' ? '€' : row.value;
         break;
       case 'theme_mode':
         settings.themeMode =

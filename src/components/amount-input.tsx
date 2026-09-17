@@ -16,7 +16,7 @@ function centsToRawInput(cents: number): string {
   const absolute = Math.abs(cents);
   const integer = Math.floor(absolute / 100);
   const fraction = (absolute % 100).toString().padStart(2, '0');
-  return `${sign}${integer}.${fraction}`;
+  return `${sign}${integer},${fraction}`;
 }
 
 export function AmountInput({

@@ -3,8 +3,9 @@ export function formatCents(cents: number, symbol = ''): string {
   const absolute = Math.abs(cents);
   const integer = Math.floor(absolute / 100);
   const fraction = (absolute % 100).toString().padStart(2, '0');
-  const groupedInteger = integer.toLocaleString('en-US');
-  const formatted = `${symbol}${groupedInteger}.${fraction}`;
+  const groupedInteger = integer.toLocaleString('en-US').replace(/,/g, '.');
+  const number = `${groupedInteger},${fraction}`;
+  const formatted = symbol ? `${number} ${symbol}` : number;
   return negative ? `-${formatted}` : formatted;
 }
 

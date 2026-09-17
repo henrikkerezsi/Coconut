@@ -30,6 +30,12 @@
       "expo-sharing",
       "@react-native-community/datetimepicker",
       [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Coconut uses the camera to take photos of receipts."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/splash-icon.png",

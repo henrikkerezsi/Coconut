@@ -66,6 +66,15 @@ export interface Transaction {
   budgetId: number | null;
   merchant: string;
   note: string | null;
+  attachmentName: string | null;
+  attachmentMime: string | null;
+  attachment: Uint8Array | null;
+}
+
+export interface Attachment {
+  name: string;
+  mime: string;
+  bytes: Uint8Array;
 }
 
 export interface ReserveTransfer {

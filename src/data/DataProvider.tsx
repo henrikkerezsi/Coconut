@@ -193,7 +193,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<Settings>({
     monthlyAllowanceCents: 0,
     initialReserveCents: 0,
-    currencySymbol: '',
+    currencySymbol: '€',
     themeMode: 'system',
     recentTransactionsCount: 5,
   });

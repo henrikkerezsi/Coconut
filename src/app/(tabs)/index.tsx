@@ -1,10 +1,11 @@
 import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Card, FAB, List, ProgressBar, Text } from 'react-native-paper';
+import { Button, Card, FAB, List, ProgressBar, Text } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useAppData } from '../../data/DataProvider';
 import { formatCents } from '../../utils/currency';
 import { currentMonthKey, monthLabel, relativeDayLabel } from '../../utils/date';
+import { nextChargeMonth } from '../../services/subscription-service';
 import { StatCard, type Tone } from '../../components/stat-card';
 import { LoadingScreen } from '../../components/loading-screen';
 import { CoconutLogo } from '../../components/coconut-logo';
@@ -25,14 +26,14 @@ export default function OverviewScreen() {
     return null;
   }
 
-  const { forecast, reserveProjection, budgetStatuses, fixedExpenseStatuses } = currentDashboard;
+  const { forecast, reserveProjection, budgetStatuses, fixedExpenseStatuses, income, subscriptions } = currentDashboard;
   const symbol = settings.currencySymbol;
   const reserved = currentMonth.isClosed;
 
   const remaining = forecast.remainingAllowanceCents;
   const remainingTone: Tone = remaining < 0 ? 'bad' : remaining === 0 ? 'neutral' : 'good';
   const adjustmentTone: Tone =
-    reserveProjection.adjustmentCents > 0 ? 'bad' : reserveProjection.adjustmentCents < 0 ? 'good' : 'neutral';
+    reserveProjection.adjustmentCents > 0 ? 'good' : reserveProjection.adjustmentCents < 0 ? 'bad' : 'neutral';
 
   return (
     <ScreenFade>
@@ -76,23 +77,62 @@ export default function OverviewScreen() {
 
       <View style={styles.statRow}>
         <StatCard label="Allowance" value={forecast.allowanceCents} format={(v) => formatCents(v, symbol)} />
+        <StatCard label="Income" value={forecast.incomeTotalCents} format={(v) => formatCents(v, symbol)} tone="good" />
+      </View>
+      <View style={styles.statRow}>
         <StatCard label="Actual spent" value={forecast.actualSpendingCents} format={(v) => formatCents(v, symbol)} />
-        <StatCard label="Remaining" value={remaining} format={(v) => formatCents(v, symbol)} tone={remainingTone} sub={remaining < 0 ? 'Over the allowance' : null} />
+        <StatCard label="Remaining" value={remaining} format={(v) => formatCents(v, symbol)} tone={remainingTone} sub={remaining < 0 ? 'Over what is available' : null} />
       </View>
 
+      {subscriptions.length > 0 && (
       <Card mode="elevated" style={styles.card} contentStyle={styles.cardContent}>
-        <Card.Title title="Planned vs Allowance" />
+        <Card.Title
+          title="Yearly Subscriptions"
+          subtitle={`${formatCents(forecast.subscriptionTotalCents, symbol)} deducted this month`}
+        />
+        <Card.Content>
+          {subscriptions.map((subscription) => (
+            <FadeIn key={subscription.id}>
+              <List.Item
+                title={subscription.name}
+                description={
+                  subscription.deductMonthly
+                    ? `Deducted monthly · renews ${monthLabel(nextChargeMonth(subscription, currentMonthKey()))}`
+                    : `Renews ${monthLabel(nextChargeMonth(subscription, currentMonthKey()))}`
+                }
+                left={(props) => <List.Icon {...props} icon="calendar-refresh" />}
+                right={() => (
+                  <Text variant="bodyLarge">
+                    {formatCents(subscription.monthlyAmountCents, symbol)}
+                  </Text>
+                )}
+                style={[styles.transactionRow, { borderRadius: theme.radii.medium }]}
+                onPress={() =>
+                  router.push({
+                    pathname: '/subscription/[id]',
+                    params: { id: String(subscription.id) },
+                  })
+                }
+              />
+            </FadeIn>
+          ))}
+        </Card.Content>
+      </Card>
+      )}
+
+      <Card mode="elevated" style={styles.card} contentStyle={styles.cardContent}>
+        <Card.Title title="Planned vs Available" />
         <Card.Content>
           <View style={styles.row}>
             <Text variant="bodyMedium">Planned spending</Text>
             <Text variant="bodyMedium">{formatCents(forecast.plannedSpendingCents, symbol)}</Text>
           </View>
           <View style={styles.row}>
-            <Text variant="bodyMedium">Allowance</Text>
-            <Text variant="bodyMedium">{formatCents(forecast.allowanceCents, symbol)}</Text>
+            <Text variant="bodyMedium">Available (allowance + income)</Text>
+            <Text variant="bodyMedium">{formatCents(forecast.availableCents, symbol)}</Text>
           </View>
           <Text variant="bodySmall" style={styles.hint}>
-            Planned spending may exceed the allowance; that is expected, not an error.
+            Planned spending may exceed what is available; that is expected, not an error.
           </Text>
         </Card.Content>
       </Card>
@@ -121,6 +161,45 @@ export default function OverviewScreen() {
                 />
               );
             })
+          )}
+        </Card.Content>
+      </Card>
+
+      <Card mode="elevated" style={styles.card} contentStyle={styles.cardContent}>
+        <Card.Title
+          title="Income"
+          subtitle={`${formatCents(forecast.incomeTotalCents, symbol)} this month`}
+          right={() => (
+            <Button
+              mode="contained-tonal"
+              compact
+              style={styles.incomeAdd}
+              onPress={() => router.push('/income/new')}
+            >
+              Add
+            </Button>
+          )}
+        />
+        <Card.Content>
+          {income.length === 0 ? (
+            <Text variant="bodyMedium" style={styles.empty}>
+              None yet. One-off income adds to what is available this month.
+            </Text>
+          ) : (
+            income.map((entry) => (
+              <FadeIn key={entry.id}>
+                <List.Item
+                  title={entry.description}
+                  description={relativeDayLabel(entry.date)}
+                  left={(props) => <List.Icon {...props} icon="bank-transfer-in" />}
+                  right={() => (
+                    <Text variant="bodyLarge">{formatCents(entry.amountCents, symbol)}</Text>
+                  )}
+                  style={[styles.transactionRow, { borderRadius: theme.radii.medium }]}
+                  onPress={() => router.push({ pathname: '/income/[id]', params: { id: String(entry.id) } })}
+                />
+              </FadeIn>
+            ))
           )}
         </Card.Content>
       </Card>
@@ -289,5 +368,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 16,
     bottom: 16,
+  },
+  incomeAdd: {
+    marginRight: 12,
   },
 });

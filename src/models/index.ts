@@ -71,6 +71,27 @@ export interface Transaction {
   attachment: Uint8Array | null;
 }
 
+export interface Income {
+  id: number;
+  monthKey: MonthKey;
+  date: string;
+  amountCents: number;
+  description: string;
+  note: string | null;
+}
+
+export interface YearlySubscription {
+  id: number;
+  name: string;
+  yearlyAmountCents: number;
+  monthlyAmountCents: number;
+  startedMonth: MonthKey;
+  billingMonth: MonthKey;
+  deductMonthly: boolean;
+  active: boolean;
+  sortOrder: number;
+}
+
 export interface Attachment {
   name: string;
   mime: string;

@@ -28,6 +28,7 @@ export interface ReserveProjectionInput {
   startingReserveCents: number;
   actualSpendingCents: number;
   allowanceCents: number;
+  incomeCents?: number;
   transfers: ReserveTransfer[];
 }
 
@@ -42,17 +43,21 @@ export interface ReserveProjection {
 /**
  * Computes the ending reserve for a month:
  *
- *   ending = starting + transfers_to_reserve - transfers_to_month - (spending - allowance)
+ *   ending = starting + transfers_to_reserve - transfers_to_month + (allowance + income - spending)
  *
- * The monthly adjustment (spending - allowance) reduces the reserve when the month
- * was overspent and increases it when spending was below the allowance.
- * Reserve transfers are tracked separately from spending.
+ * The monthly adjustment (allowance + income - spending) grows the reserve when
+ * the month came in under its available funds and reduces it when spending
+ * exceeded them. Reserve transfers are tracked separately from spending.
  */
 export function projectReserve(input: ReserveProjectionInput): ReserveProjection {
-  const { startingReserveCents, actualSpendingCents, allowanceCents, transfers } = input;
+  const { startingReserveCents, actualSpendingCents, allowanceCents, incomeCents = 0, transfers } = input;
   const { netCents } = sumTransfers(transfers);
-  const { adjustmentCents, overspent } = reserveAdjustmentCents(actualSpendingCents, allowanceCents);
-  const endingReserveCents = startingReserveCents + netCents - adjustmentCents;
+  const { adjustmentCents, overspent } = reserveAdjustmentCents(
+    actualSpendingCents,
+    allowanceCents,
+    incomeCents
+  );
+  const endingReserveCents = startingReserveCents + netCents + adjustmentCents;
   return {
     startingReserveCents,
     endingReserveCents,

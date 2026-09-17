@@ -18,17 +18,19 @@ export function spendingDifference(actualSpendingCents: number, plannedSpendingC
 
 /**
  * The reserve adjustment produced by a month:
- * actual monthly spending - monthly allowance.
- * A positive value means the reserve must be reduced.
+ * (monthly allowance + one-off income) - actual monthly spending.
+ * A positive value means money is saved into the reserve; a negative value
+ * means spending drew from it.
  */
 export function reserveAdjustmentCents(
   actualSpendingCents: number,
-  allowanceCents: number
+  allowanceCents: number,
+  incomeCents = 0
 ): ReserveAdjustment {
-  const adjustmentCents = actualSpendingCents - allowanceCents;
+  const adjustmentCents = allowanceCents + incomeCents - actualSpendingCents;
   return {
     adjustmentCents,
-    overspent: adjustmentCents > 0,
+    overspent: adjustmentCents < 0,
   };
 }
 

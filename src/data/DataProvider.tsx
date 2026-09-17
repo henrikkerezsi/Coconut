@@ -9,6 +9,7 @@ import React, {
 import type {
   Budget,
   FixedExpense,
+  Income,
   MerchantSuggestion,
   Month,
   MonthFixedExpense,
@@ -16,6 +17,7 @@ import type {
   ReserveTransfer,
   Settings,
   Transaction,
+  YearlySubscription,
 } from '../models';
 import { currentMonthKey } from '../utils/date';
 import { getDatabase } from '../database/database';
@@ -51,6 +53,19 @@ import {
   type TransactionInput,
 } from '../database/transactions';
 import {
+  createIncome,
+  deleteIncome as deleteIncomeRow,
+  updateIncome as updateIncomeRow,
+  type IncomeInput,
+} from '../database/income';
+import {
+  createYearlySubscription,
+  deleteYearlySubscription as deleteYearlySubscriptionRow,
+  getAllYearlySubscriptions,
+  updateYearlySubscription as updateYearlySubscriptionRow,
+  type YearlySubscriptionInput,
+} from '../database/yearlySubscriptions';
+import {
   createReserveTransfer,
   deleteReserveTransfer,
   getMerchantSuggestions,
@@ -84,6 +99,8 @@ export interface MonthDashboard {
   budgetStatuses: BudgetWithStatus[];
   fixedExpenseStatuses: FixedExpenseWithStatus[];
   transactions: Transaction[];
+  income: Income[];
+  subscriptions: YearlySubscription[];
   budgetNames: Map<number, string>;
 }
 
@@ -95,6 +112,7 @@ interface AppData {
   currentDashboard: MonthDashboard | null;
   allFixedExpenses: FixedExpense[];
   budgets: Budget[];
+  allSubscriptions: YearlySubscription[];
   allMonths: Month[];
   dashboardFor: (monthKey: MonthKey) => Promise<MonthDashboard | null>;
   setMonthlyAllowance: (cents: number) => Promise<void>;
@@ -120,6 +138,12 @@ interface AppData {
     note: string | null
   ) => Promise<void>;
   removeReserveTransfer: (id: number) => Promise<void>;
+  addIncome: (input: IncomeInput) => Promise<void>;
+  saveIncome: (id: number, input: IncomeInput) => Promise<void>;
+  removeIncome: (id: number) => Promise<void>;
+  addYearlySubscription: (input: YearlySubscriptionInput) => Promise<void>;
+  saveYearlySubscription: (id: number, input: YearlySubscriptionInput) => Promise<void>;
+  removeYearlySubscription: (id: number) => Promise<void>;
   closeCurrentMonth: () => Promise<void>;
   reopenCurrentMonth: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -132,12 +156,20 @@ async function buildDashboard(monthKey: MonthKey): Promise<MonthDashboard | null
   if (!data) {
     return null;
   }
-  const { month, fixedExpenses, budgets, transactions, transfers } = data;
-  const forecast = forecastMonth({ month, fixedExpenses, budgets, transactions });
+  const { month, fixedExpenses, budgets, transactions, income, subscriptions, transfers } = data;
+  const forecast = forecastMonth({
+    month,
+    income,
+    subscriptions,
+    fixedExpenses,
+    budgets,
+    transactions,
+  });
   const reserveProjection = projectReserve({
     startingReserveCents: month.startingReserveCents,
     actualSpendingCents: forecast.actualSpendingCents,
     allowanceCents: month.allowanceCents,
+    incomeCents: forecast.incomeTotalCents,
     transfers,
   });
 
@@ -184,6 +216,8 @@ async function buildDashboard(monthKey: MonthKey): Promise<MonthDashboard | null
     budgetStatuses,
     fixedExpenseStatuses,
     transactions,
+    income,
+    subscriptions,
     budgetNames: new Map(budgetDefinitions.map((budget) => [budget.id, budget.name])),
   };
 }
@@ -202,6 +236,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
   const [allFixedExpenses, setAllFixedExpenses] = useState<FixedExpense[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [allSubscriptions, setAllSubscriptions] = useState<YearlySubscription[]>([]);
   const [allMonths, setAllMonths] = useState<Month[]>([]);
 
   const refresh = useCallback(async () => {
@@ -217,6 +252,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setRecentTransactions(await getRecentTransactions(nextSettings.recentTransactionsCount, db));
     setAllFixedExpenses(await getAllFixedExpenses(db));
     setBudgets(await getAllBudgets(db));
+    setAllSubscriptions(await getAllYearlySubscriptions(db));
     setAllMonths(await getAllMonths(db));
   }, []);
 
@@ -245,6 +281,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       currentDashboard,
       allFixedExpenses,
       budgets,
+      allSubscriptions,
       allMonths,
       dashboardFor: buildDashboard,
       setMonthlyAllowance: async (cents) => {
@@ -346,6 +383,37 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         await deleteReserveTransfer(id, db);
         await refresh();
       },
+      addIncome: async (input) => {
+        const db = await getDatabase();
+        await createIncome(input, db);
+        await refresh();
+      },
+      saveIncome: async (id, input) => {
+        const db = await getDatabase();
+        await updateIncomeRow(id, input, db);
+        await refresh();
+      },
+      removeIncome: async (id) => {
+        const db = await getDatabase();
+        await deleteIncomeRow(id, db);
+        await refresh();
+      },
+      addYearlySubscription: async (input) => {
+        const db = await getDatabase();
+        const sortOrder = allSubscriptions.length;
+        await createYearlySubscription({ ...input, sortOrder }, db);
+        await refresh();
+      },
+      saveYearlySubscription: async (id, input) => {
+        const db = await getDatabase();
+        await updateYearlySubscriptionRow(id, input, db);
+        await refresh();
+      },
+      removeYearlySubscription: async (id) => {
+        const db = await getDatabase();
+        await deleteYearlySubscriptionRow(id, db);
+        await refresh();
+      },
       closeCurrentMonth: async () => {
         const monthKey = currentMonthKey();
         const dashboard = await buildDashboard(monthKey);
@@ -360,7 +428,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       },
       refresh,
     };
-  }, [ready, settings, recentTransactions, currentMonth, currentDashboard, allFixedExpenses, budgets, allMonths, refresh]);
+  }, [ready, settings, recentTransactions, currentMonth, currentDashboard, allFixedExpenses, budgets, allSubscriptions, allMonths, refresh]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

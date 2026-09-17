@@ -2,18 +2,22 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import type {
   Budget,
   FixedExpense,
+  Income,
   Month,
   MonthBudget,
   MonthFixedExpense,
   MonthKey,
   ReserveTransfer,
   Transaction,
+  YearlySubscription,
 } from '../models';
 import { getDatabase } from './database';
 import { getMonth, getClosedMonths, getPreviousMonth } from './months';
 import { getAllBudgets, getAllMonthBudgets, getMonthBudgets } from './budgets';
 import { getMonthFixedExpenses } from './fixedExpenses';
 import { getAllTransactions, getMonthTransactions } from './transactions';
+import { getMonthIncome } from './income';
+import { getActiveYearlySubscriptions } from './yearlySubscriptions';
 import { getMonthTransfers } from './reserve';
 import { forecastMonth } from '../services/forecast-service';
 import { spendingByCategory } from '../services/statistics-service';
@@ -23,6 +27,8 @@ export interface MonthData {
   fixedExpenses: MonthFixedExpense[];
   budgets: MonthBudget[];
   transactions: Transaction[];
+  income: Income[];
+  subscriptions: YearlySubscription[];
   transfers: ReserveTransfer[];
 }
 
@@ -40,13 +46,15 @@ export async function getMonthData(
   if (!month) {
     return null;
   }
-  const [fixedExpenses, budgets, transactions, transfers] = await Promise.all([
+  const [fixedExpenses, budgets, transactions, income, subscriptions, transfers] = await Promise.all([
     getMonthFixedExpenses(monthKey, database),
     getMonthBudgets(monthKey, database),
     getMonthTransactions(monthKey, database),
+    getMonthIncome(monthKey, database),
+    getActiveYearlySubscriptions(database),
     getMonthTransfers(monthKey, database),
   ]);
-  return { month, fixedExpenses, budgets, transactions, transfers };
+  return { month, fixedExpenses, budgets, transactions, income, subscriptions, transfers };
 }
 
 export async function getPreviousMonthData(
@@ -102,6 +110,8 @@ export async function getClosedMonthRecords(
       fixedExpenses: data.fixedExpenses,
       budgets: data.budgets,
       transactions: data.transactions,
+      income: data.income,
+      subscriptions: data.subscriptions,
     });
     records.push({
       monthKey: month.monthKey,

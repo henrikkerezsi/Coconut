@@ -30,15 +30,15 @@ describe('spendingDifference', () => {
 });
 
 describe('reserveAdjustmentCents', () => {
-  it('reduces the reserve when spending exceeds the allowance', () => {
+  it('goes negative when spending exceeds the allowance', () => {
     const result = reserveAdjustmentCents(60000, 50000);
-    expect(result.adjustmentCents).toBe(10000);
+    expect(result.adjustmentCents).toBe(-10000);
     expect(result.overspent).toBe(true);
   });
 
-  it('increases the reserve when spending is below the allowance', () => {
+  it('is positive when spending is below the allowance', () => {
     const result = reserveAdjustmentCents(35000, 50000);
-    expect(result.adjustmentCents).toBe(-15000);
+    expect(result.adjustmentCents).toBe(15000);
     expect(result.overspent).toBe(false);
   });
 
@@ -46,6 +46,22 @@ describe('reserveAdjustmentCents', () => {
     const result = reserveAdjustmentCents(50000, 50000);
     expect(result.adjustmentCents).toBe(0);
     expect(result.overspent).toBe(false);
+  });
+
+  it('neutralises the adjustment when income covers the overspend', () => {
+    const result = reserveAdjustmentCents(60000, 50000, 10000);
+    expect(result.adjustmentCents).toBe(0);
+    expect(result.overspent).toBe(false);
+  });
+
+  it('keeps income in the reserve when it exceeds the overspend', () => {
+    const result = reserveAdjustmentCents(55000, 50000, 20000);
+    expect(result.adjustmentCents).toBe(15000);
+    expect(result.overspent).toBe(false);
+  });
+
+  it('stays unchanged when no income is provided', () => {
+    expect(reserveAdjustmentCents(60000, 50000).adjustmentCents).toBe(-10000);
   });
 });
 

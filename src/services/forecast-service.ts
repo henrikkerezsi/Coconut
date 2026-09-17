@@ -1,4 +1,12 @@
-import type { Month, MonthBudget, MonthFixedExpense, Transaction } from '../models';
+import type {
+  Income,
+  Month,
+  MonthBudget,
+  MonthFixedExpense,
+  Transaction,
+  YearlySubscription,
+} from '../models';
+import { subscriptionTotalCents } from './subscription-service';
 
 export interface FixedExpenseTotals {
   expectedTotalCents: number;
@@ -37,6 +45,10 @@ export function transactionTotal(transactions: Transaction[]): number {
   return transactions.reduce((total, transaction) => total + transaction.amountCents, 0);
 }
 
+export function incomeTotal(income: Income[]): number {
+  return income.reduce((total, entry) => total + entry.amountCents, 0);
+}
+
 export interface BudgetStatus {
   plannedCents: number;
   spentCents: number;
@@ -55,6 +67,9 @@ export function budgetStatus(plannedAmountCents: number, spentCents: number): Bu
 
 export interface MonthForecast {
   allowanceCents: number;
+  incomeTotalCents: number;
+  availableCents: number;
+  subscriptionTotalCents: number;
   plannedSpendingCents: number;
   actualSpendingCents: number;
   fixedExpectedTotalCents: number;
@@ -68,6 +83,8 @@ export interface MonthForecast {
 
 export interface ForecastInput {
   month: Pick<Month, 'allowanceCents'>;
+  income?: Income[];
+  subscriptions?: YearlySubscription[];
   fixedExpenses: MonthFixedExpense[];
   budgets: MonthBudget[];
   transactions: Transaction[];
@@ -76,12 +93,21 @@ export interface ForecastInput {
 /**
  * Builds the forecast for a month. `actualSpendingCents` is the amount of money
  * that is currently accounted for (charged fixed expenses plus entered
- * transactions). `plannedSpendingCents` reflects the original plan (expected
- * fixed expenses plus budget allocations). Both are estimates until the month
- * is closed; the caller decides how they are labelled in the UI.
+ * transactions plus yearly-subscription deductions). `plannedSpendingCents`
+ * reflects the original plan (expected fixed expenses plus budget allocations
+ * plus subscription deductions). Both are estimates until the month is closed;
+ * the caller decides how they are labelled in the UI.
+ *
+ * `availableCents` (allowance plus one-off income) is the money the month can
+ * draw on. The remaining allowance and the expected reserve adjustment are
+ * computed against it, so unspent income stays in the reserve at month end.
  */
 export function forecastMonth(input: ForecastInput): MonthForecast {
   const { month, fixedExpenses, budgets, transactions } = input;
+  const income = input.income ?? [];
+  const incomeTotalCents = incomeTotal(income);
+  const availableCents = month.allowanceCents + incomeTotalCents;
+  const subscriptionTotal = subscriptionTotalCents(input.subscriptions ?? []);
   const fixed = sumFixedExpenses(fixedExpenses);
   const discretionarySpendingCents = transactionTotal(transactions);
   const budgetPlannedTotalCents = budgets.reduce(
@@ -93,19 +119,24 @@ export function forecastMonth(input: ForecastInput): MonthForecast {
     0
   );
 
-  const actualSpendingCents = fixedChargedTotalCents + discretionarySpendingCents;
-  const plannedSpendingCents = fixed.expectedTotalCents + budgetPlannedTotalCents;
+  const actualSpendingCents =
+    fixedChargedTotalCents + discretionarySpendingCents + subscriptionTotal;
+  const plannedSpendingCents =
+    fixed.expectedTotalCents + budgetPlannedTotalCents + subscriptionTotal;
 
   return {
     allowanceCents: month.allowanceCents,
+    incomeTotalCents,
+    availableCents,
+    subscriptionTotalCents: subscriptionTotal,
     plannedSpendingCents,
     actualSpendingCents,
     fixedExpectedTotalCents: fixed.expectedTotalCents,
     fixedChargedTotalCents,
     discretionarySpendingCents,
     budgetPlannedTotalCents,
-    remainingAllowanceCents: month.allowanceCents - actualSpendingCents,
-    expectedAdjustmentCents: actualSpendingCents - month.allowanceCents,
-    plannedVsAllowanceCents: month.allowanceCents - plannedSpendingCents,
+    remainingAllowanceCents: availableCents - actualSpendingCents,
+    expectedAdjustmentCents: availableCents - actualSpendingCents,
+    plannedVsAllowanceCents: availableCents - plannedSpendingCents,
   };
 }

@@ -32,6 +32,14 @@ function ThemedContent() {
             options={{ title: 'Transaction', presentation: 'modal' }}
           />
           <Stack.Screen
+            name="income/new"
+            options={{ title: 'New Income', presentation: 'modal' }}
+          />
+          <Stack.Screen
+            name="income/[id]"
+            options={{ title: 'Income', presentation: 'modal' }}
+          />
+          <Stack.Screen
             name="fixed-expense/new"
             options={{ title: 'New Fixed Expense', headerShown: false }}
           />
@@ -41,6 +49,14 @@ function ThemedContent() {
           />
           <Stack.Screen name="budget/new" options={{ title: 'New Budget', headerShown: false }} />
           <Stack.Screen name="budget/[id]" options={{ title: 'Budget', headerShown: false }} />
+          <Stack.Screen
+            name="subscription/new"
+            options={{ title: 'New Subscription', headerShown: false }}
+          />
+          <Stack.Screen
+            name="subscription/[id]"
+            options={{ title: 'Subscription', headerShown: false }}
+          />
           <Stack.Screen name="about" options={{ title: 'About', headerShown: false }} />
           <Stack.Screen name="whats-new" options={{ title: "What's New", headerShown: false }} />
           <Stack.Screen
@@ -50,6 +66,10 @@ function ThemedContent() {
           <Stack.Screen
             name="planning/budgets"
             options={{ title: 'Flexible Budgets' }}
+          />
+          <Stack.Screen
+            name="planning/subscriptions"
+            options={{ title: 'Yearly Subscriptions' }}
           />
           <Stack.Screen
             name="planning/reserve"

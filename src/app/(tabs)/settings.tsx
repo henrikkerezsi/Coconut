@@ -76,6 +76,12 @@ export default function SettingsScreen() {
           left={(props) => <List.Icon {...props} icon="tag-multiple-outline" />}
           onPress={() => router.push('/planning/budgets')}
         />
+        <List.Item
+          title="Yearly subscriptions"
+          description="One-time yearly charges spread across the year"
+          left={(props) => <List.Icon {...props} icon="calendar-refresh-outline" />}
+          onPress={() => router.push('/planning/subscriptions')}
+        />
       </List.Section>
 
       <List.Section>

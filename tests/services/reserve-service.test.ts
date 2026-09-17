@@ -32,7 +32,7 @@ describe('sumTransfers', () => {
 });
 
 describe('projectReserve', () => {
-  it('reduces the reserve when spending exceeds the allowance', () => {
+  it('draws from the reserve when spending exceeds the allowance', () => {
     const result = projectReserve({
       startingReserveCents: 100000,
       actualSpendingCents: 60000,
@@ -40,11 +40,11 @@ describe('projectReserve', () => {
       transfers: [],
     });
     expect(result.endingReserveCents).toBe(90000);
-    expect(result.adjustmentCents).toBe(10000);
+    expect(result.adjustmentCents).toBe(-10000);
     expect(result.overspent).toBe(true);
   });
 
-  it('increases the reserve when spending is below the allowance', () => {
+  it('grows the reserve when spending is below the allowance', () => {
     const result = projectReserve({
       startingReserveCents: 100000,
       actualSpendingCents: 40000,
@@ -52,7 +52,7 @@ describe('projectReserve', () => {
       transfers: [],
     });
     expect(result.endingReserveCents).toBe(110000);
-    expect(result.adjustmentCents).toBe(-10000);
+    expect(result.adjustmentCents).toBe(10000);
   });
 
   it('applies transfers on top of the monthly adjustment', () => {
@@ -73,6 +73,31 @@ describe('projectReserve', () => {
       transfers: [],
     });
     expect(result.endingReserveCents).toBe(100000);
+  });
+
+  it('counts one-off income as available money', () => {
+    const result = projectReserve({
+      startingReserveCents: 100000,
+      actualSpendingCents: 60000,
+      allowanceCents: 50000,
+      incomeCents: 10000,
+      transfers: [],
+    });
+    expect(result.adjustmentCents).toBe(0);
+    expect(result.overspent).toBe(false);
+    expect(result.endingReserveCents).toBe(100000);
+  });
+
+  it('adds unspent income to the reserve', () => {
+    const result = projectReserve({
+      startingReserveCents: 100000,
+      actualSpendingCents: 40000,
+      allowanceCents: 50000,
+      incomeCents: 15000,
+      transfers: [],
+    });
+    expect(result.adjustmentCents).toBe(25000);
+    expect(result.endingReserveCents).toBe(125000);
   });
 });
 

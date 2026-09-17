@@ -1,8 +1,16 @@
-import type { Month, MonthBudget, MonthFixedExpense, Transaction } from '../../src/models';
+import type {
+  Income,
+  Month,
+  MonthBudget,
+  MonthFixedExpense,
+  Transaction,
+  YearlySubscription,
+} from '../../src/models';
 import {
   budgetStatus,
   fixedExpenseAmount,
   forecastMonth,
+  incomeTotal,
   sumFixedExpenses,
   transactionTotal,
 } from '../../src/services/forecast-service';
@@ -47,6 +55,34 @@ function transaction(amountCents: number): Transaction {
   };
 }
 
+function income(amountCents: number): Income {
+  return {
+    id: 1,
+    monthKey: '2026-09',
+    date: '2026-09-03',
+    amountCents,
+    description: 'Bonus',
+    note: null,
+  };
+}
+
+function subscription(
+  overrides: Partial<YearlySubscription> = {}
+): YearlySubscription {
+  return {
+    id: 1,
+    name: 'Streaming',
+    yearlyAmountCents: 12000,
+    monthlyAmountCents: 1000,
+    startedMonth: '2025-03',
+    billingMonth: '2024-04',
+    deductMonthly: true,
+    active: true,
+    sortOrder: 0,
+    ...overrides,
+  };
+}
+
 describe('fixedExpenseAmount', () => {
   it('uses the actual amount once it is known', () => {
     expect(fixedExpenseAmount(instance({ actualAmountCents: 12345 }))).toBe(12345);
@@ -80,6 +116,16 @@ describe('transactionTotal', () => {
 
   it('returns zero for an empty list', () => {
     expect(transactionTotal([])).toBe(0);
+  });
+});
+
+describe('incomeTotal', () => {
+  it('sums income amounts', () => {
+    expect(incomeTotal([income(1000), income(2500)])).toBe(3500);
+  });
+
+  it('returns zero for an empty list', () => {
+    expect(incomeTotal([])).toBe(0);
   });
 });
 
@@ -121,7 +167,7 @@ describe('forecastMonth', () => {
   it('computes remaining allowance and expected adjustment', () => {
     const forecast = forecastMonth({ month: month(), fixedExpenses: fixed, budgets, transactions });
     expect(forecast.remainingAllowanceCents).toBe(13000);
-    expect(forecast.expectedAdjustmentCents).toBe(37000 - 50000);
+    expect(forecast.expectedAdjustmentCents).toBe(50000 - 37000);
   });
 
   it('reports how planned spending relates to the allowance', () => {
@@ -139,5 +185,58 @@ describe('forecastMonth', () => {
     expect(forecast.actualSpendingCents).toBe(0);
     expect(forecast.plannedSpendingCents).toBe(0);
     expect(forecast.remainingAllowanceCents).toBe(50000);
+  });
+
+  it('adds one-off income to what is available for the month', () => {
+    const forecast = forecastMonth({
+      month: month(),
+      income: [income(10000), income(5000)],
+      fixedExpenses: fixed,
+      budgets,
+      transactions,
+    });
+    expect(forecast.incomeTotalCents).toBe(15000);
+    expect(forecast.availableCents).toBe(65000);
+    expect(forecast.remainingAllowanceCents).toBe(65000 - 37000);
+    expect(forecast.expectedAdjustmentCents).toBe(65000 - 37000);
+  });
+
+  it('treats unspent income as savings at month end', () => {
+    const forecast = forecastMonth({
+      month: month(),
+      income: [income(20000)],
+      fixedExpenses: [],
+      budgets: [],
+      transactions: [],
+    });
+    expect(forecast.availableCents).toBe(70000);
+    expect(forecast.remainingAllowanceCents).toBe(70000);
+    expect(forecast.expectedAdjustmentCents).toBe(70000);
+  });
+
+  it('deducts active yearly subscriptions from the month', () => {
+    const forecast = forecastMonth({
+      month: month(),
+      subscriptions: [subscription({ monthlyAmountCents: 1000 }), subscription({ monthlyAmountCents: 2500 })],
+      fixedExpenses: fixed,
+      budgets,
+      transactions,
+    });
+    expect(forecast.subscriptionTotalCents).toBe(3500);
+    expect(forecast.plannedSpendingCents).toBe(50000 + 3500);
+    expect(forecast.actualSpendingCents).toBe(37000 + 3500);
+    expect(forecast.remainingAllowanceCents).toBe(50000 - 37000 - 3500);
+  });
+
+  it('skips subscriptions that are not deducted monthly', () => {
+    const forecast = forecastMonth({
+      month: month(),
+      subscriptions: [subscription({ monthlyAmountCents: 1000, deductMonthly: false })],
+      fixedExpenses: [],
+      budgets: [],
+      transactions: [],
+    });
+    expect(forecast.subscriptionTotalCents).toBe(0);
+    expect(forecast.actualSpendingCents).toBe(0);
   });
 });

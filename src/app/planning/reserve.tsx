@@ -48,7 +48,7 @@ export default function ReserveScreen() {
 
   const { reserveProjection: projection } = currentDashboard;
   const symbol = settings.currencySymbol;
-  const adjustment = -projection.adjustmentCents;
+  const adjustment = projection.adjustmentCents;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -64,7 +64,7 @@ export default function ReserveScreen() {
           format={(v) => formatCents(v, symbol)}
         />
       </View>
-      <View style={styles.statRow}>
+<View style={styles.statRow}>
         <StatCard
           label="Month surplus"
           value={adjustment}

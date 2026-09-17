@@ -19,7 +19,7 @@
       "package": "com.coconut.app",
       "minSdkVersion": 29,
       "predictiveBackGestureEnabled": false,
-      "versionCode": 6
+      "versionCode": 7
     },
     "web": {
       "favicon": "./assets/favicon.png"

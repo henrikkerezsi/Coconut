@@ -1,8 +1,10 @@
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import { backupDatabaseAsync, openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
 import dayjs from 'dayjs';
-import { getDatabase, closeDatabase, resetDatabase } from '../database/database';
+import { getDatabase, resetDatabase } from '../database/database';
 import { BACKUP_EXTENSION } from './date';
+import { toFilePath } from './paths';
 
 export const BACKUP_MIME_TYPE = 'application/x-sqlite3';
 
@@ -33,40 +35,31 @@ export async function shareBackup(): Promise<boolean> {
 }
 
 /**
- * Removes stale SQLite sidecar files (WAL/SHM/journal) so a restored database
- * is reopened cleanly. Leftover sidecar files from a previous session can
- * otherwise make SQLite report the restored database as malformed.
- */
-function removeSidecarSuffixes(databasePath: string): void {
-  const file = new File(databasePath);
-  const directory = file.parentDirectory;
-  const name = file.name;
-  for (const suffix of ['-wal', '-shm', '-journal']) {
-    const sidecar = new File(directory, `${name}${suffix}`);
-    if (sidecar.exists) {
-      sidecar.delete();
-    }
-  }
-}
-
-/**
- * Replaces the app database with the given backup file content.
- * The app database is closed first, the file is overwritten, and the
- * database connection is reopened.
+ * Copies the picked backup into the app database using SQLite's online backup
+ * API. The picked file is first staged in the app cache (which expo-file-system
+ * is allowed to write to) and opened as a database, so the restore does not
+ * depend on expo-file-system having write access to the SQLite directory.
  */
 export async function restoreFromBackup(fileUri: string): Promise<void> {
   const source = new File(fileUri);
   const bytes = await source.bytes();
 
-  const db = await getDatabase();
-  const databasePath = db.databasePath;
-  await closeDatabase();
+  const tempName = `coconut-restore-${Date.now()}.${BACKUP_EXTENSION}`;
+  const tempFile = new File(Paths.cache, tempName);
+  tempFile.create({ intermediates: true, overwrite: true });
+  tempFile.write(bytes);
 
-  removeSidecarSuffixes(databasePath);
-
-  const target = new File(databasePath);
-  target.create({ intermediates: true, overwrite: true });
-  target.write(bytes);
+  let tempDb: SQLiteDatabase | null = null;
+  try {
+    tempDb = await openDatabaseAsync(tempName, {}, toFilePath(Paths.cache.uri));
+    const db = await getDatabase();
+    await backupDatabaseAsync({ sourceDatabase: tempDb, destDatabase: db });
+  } finally {
+    await tempDb?.closeAsync();
+    if (tempFile.exists) {
+      tempFile.delete();
+    }
+  }
 
   await resetDatabase();
 }

@@ -8,7 +8,11 @@ a monthly spending allowance and a savings reserve.
 The application is intended for a single user and models the user's personal financial
 system. It is not a general-purpose banking or accounting application.
 
-There is no bank integration, account system, advertising, analytics, or any required
+Optionally, two or more authenticated Coconut users can connect in a Shared Space to
+track shared expenses (typically a couple). A Shared Space extends, and never replaces,
+each user's personal financial system.
+
+There is no bank integration, advertising, analytics, or any required
 internet connection. All financial data is stored locally on the device in a SQLite
 database that is the single source of truth.
 
@@ -129,6 +133,11 @@ A transaction contains:
 - Optional note.
 
 Transactions are manually entered by the user.
+
+Transactions may also originate from a shared expense: each participant gets exactly one
+linked personal transaction whose amount equals that participant's split. Linked
+transactions are derived from the shared expense and are never edited as a separate
+record.
 
 Entering a transaction assigned to a budget immediately updates the relevant budget's
 actual spending and the month's overall actual spending.
@@ -293,7 +302,121 @@ personal dataset is available across their own devices.
 
 ---
 
-## 12. Backup and Restore
+## 12. Shared Expenses
+
+### 12.1 Concept
+
+Each user keeps an independent Coconut account and personal financial system. A Shared
+Space connects two or more authenticated Coconut users (initial use case: a couple
+sharing expenses) and holds shared expenses, their splits, and settlements.
+
+The shared-expense relationship is authoritative:
+
+    Shared Expense
+      ├── total amount
+      ├── payer (a member)
+      └── per-participant split
+             ├── participant A's personal linked transaction
+             └── participant B's personal linked transaction
+
+A participant's personal transaction amount is always derived from their split. Editing a
+shared expense re-derives the linked personal transactions; the split is never maintained
+independently in two places.
+
+### 12.2 Authentication and security
+
+One Coconut Supabase project hosts all users. There are no per-user Supabase projects,
+and users do not share one Supabase Auth account; each Coconut user is a separate
+Supabase Auth user.
+
+Supabase Row Level Security distinguishes personal rows from shared rows:
+
+- Personal rows: `user_id = auth.uid()`.
+- Shared rows: `auth.uid()` is a member of the relevant Shared Space.
+
+A user cannot read or write another user's personal rows, join a space arbitrarily, or
+create expenses/splits/settlements for users outside the space. Every new exposed table
+has RLS enabled, and member vs. non-member RLS behavior is tested.
+
+### 12.3 Database model
+
+Adapted with additive, incremental migrations only; existing personal data stays intact.
+
+- `shared_spaces` — name, creator, timestamps, deleted flag.
+- `shared_space_members` — space, user, role (`owner`/`member`), joined; unique
+  `(space_id, user_id)`.
+- `shared_expenses` — space, description, total amount, date, paid by (a member), note,
+  creator, timestamps, deleted flag.
+- `shared_expense_splits` — expense, user, explicit monetary share in cents. Only
+  explicit amounts are persisted; 50/50 and percentage splits are UI conveniences that
+  resolve to amounts. Sum of splits equals the total.
+- `settlements` — space, from user, to user, amount, date, note, timestamps.
+
+Enforced invariants: totals positive; splits non-negative and summing to the total; payer
+and split users are space members; settlement users are space members; no self-settlement.
+Validated at data-application and database/business-logic level, never UI-only.
+
+### 12.4 Personal transaction provenance
+
+The existing personal transaction model is extended, not duplicated, with a provenance
+reference (`origin_type` / `origin_id`). Manually entered transactions use `manual`; a
+transaction created from a shared expense references that expense's UUID. The
+transaction's own stable ID remains unchanged.
+
+A shared expense synchronizes to every member's device; each device maintains the linked
+personal transaction for that user's own share. When splits change, linked transactions
+update in place (never duplicated); when a shared expense is deleted, linked transactions
+follow the app's deletion/tombstone model — no orphaned transactions.
+
+### 12.5 Balances and settlements
+
+The net "who owes whom" balance is never stored as mutable state. It is derived from
+shared expenses, their splits, and settlements, with a clear sign convention, and reduced
+to a single net amount between each pair of members. Coconut shows only the resulting net
+settlement.
+
+Settling creates a `settlements` record; it does not modify or delete historical shared
+expenses. After settlement the outstanding balance is zero while expense and settlement
+history remain visible.
+
+### 12.6 Shared Space lifecycle
+
+- Create: one user creates the space.
+- Invite/join: additional users join only through an explicit, secure invitation
+  (invitation token/deep link or pending membership). Knowing a space UUID alone grants
+  nothing.
+- Leave/remove: a member can be removed or leave without deleting historical shared
+  expenses.
+
+### 12.7 Sync integration
+
+Shared data (spaces, members, expenses, splits, settlements) uses the same local-first
+sync engine as personal data: stable UUIDs, timestamps, outbox/tombstone logs, and the
+existing last-write-wins conflict strategy. Multiple members' devices pull the same shared
+rows. Splits are validated after synchronization so total != sum of splits is never
+silently introduced.
+
+### 12.8 UI
+
+A dedicated Shared area shows spaces, members, the outstanding net balance, settlements,
+and the shared-expense list. Adding an expense is fast: description, amount, date, paid by
+(me / another member), split method, optional note, and the payer's and each
+participant's displayed share. Personal transaction views visibly identify shared-linked
+transactions and can navigate to the originating shared expense.
+
+No separate category system: a shared expense may carry an optional category/merchant
+association, and the resulting personal transaction uses each participant's own budget
+category.
+
+### 12.9 Non-goals
+
+No real-time collaborative editing, no new backend, no second database, no separate
+Supabase projects, no dedicated global state for this feature, no bank integration, no
+general Splitwise replacement. Use the existing Coconut architecture throughout.
+
+---
+
+## 13. Backup and Restore
 
 Synchronization and backup are separate features.
 
@@ -305,12 +428,13 @@ Synchronization and backup are separate features.
 
 ---
 
-## 13. Privacy
+## 14. Privacy
 
 - Works completely offline.
 - Stores financial information locally.
 - No network requests during normal, non-synced operation.
-- No user account, analytics, or tracking.
+- No analytics or tracking. No account in local-only mode; Supabase Auth accounts exist
+  only when the user opts into multi-device sync and Shared Expenses.
 - No advertising.
 - No bank credentials or banking integration.
 - Avoids unnecessary permissions.
@@ -320,7 +444,7 @@ synchronization to their own Supabase project; the app never sends data anywhere
 
 ---
 
-## 14. Technical Stack
+## 15. Technical Stack
 
 - React Native (via Expo)
 - Expo SDK
@@ -335,8 +459,10 @@ synchronization to their own Supabase project; the app never sends data anywhere
 
 Architecture:
 - Business logic, database access, sync, and UI have clear separation.
-- Supabase is the only permitted backend and is used exclusively as an optional sync
-  mirror; no other backend, authentication, or analytics is used.
+- Supabase is the only permitted backend: an optional sync mirror for the user's own
+  data and the host for Shared Expenses. Supabase Auth identifies users only for these
+  optional features; Row Level Security separates personal and shared rows. No other
+  backend, provider, or analytics is used.
 - Small dependency footprint.
 - Favor Expo-supported functionality.
 - The application must build and run as a local desktop web application and remain
@@ -344,7 +470,7 @@ Architecture:
 
 ---
 
-## 15. Desktop and Web
+## 16. Desktop and Web
 
 Coconut targets Android first, but the code must also compile as a desktop web
 application that runs locally.
@@ -361,7 +487,7 @@ application that runs locally.
 
 ---
 
-## 16. Design Philosophy
+## 17. Design Philosophy
 
 Focused personal tool, not a commercial banking application.
 
@@ -375,14 +501,16 @@ Priorities:
 7. Useful historical information without overwhelming the user.
 8. Complete offline functionality and strong privacy by default.
 9. Optional multi-device sync that never compromises local-first behavior.
-10. Minimal unnecessary complexity.
+10. Optional Shared Expenses between trusted users that derive from, rather than
+    duplicate, personal records.
+11. Minimal unnecessary complexity.
 
 The user should be able to open the application and understand the current financial
 situation within a few seconds.
 
 ---
 
-## 17. Project Structure
+## 18. Project Structure
 
     Coconut/
     ├── idea.txt              This file

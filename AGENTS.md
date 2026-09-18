@@ -8,13 +8,17 @@ Read `idea.txt` for the full product and architecture specification.
 ## 1. Project Overview
 
 Coconut is a private, offline-first budget management app for Android and
-desktop/web. Single user. Local SQLite storage is the single source of truth;
-the app works fully offline with no network.
+desktop/web. Each user keeps an independent personal dataset. Optionally, two or
+more authenticated users can form a Shared Space to track shared expenses.
+Local SQLite storage is the single source of truth; the app works fully offline
+with no network.
 
 Optional sync: the user's own Supabase project is the ONLY permitted backend,
-and only for optional, opt-in row-level synchronization (see `idea.txt`
-§11.2 / 11.3). It is local-first: with sync disabled the app makes zero network
-requests. Supabase URL + anon key are configured in-app (never hardcoded).
+used for (a) opt-in row-level synchronization of personal data and (b) Shared
+Spaces, where separate Supabase Auth users exchange shared expenses via RLS
+policies (see `idea.txt` §11–12). It is local-first: with sync disabled the app
+makes zero network requests. Supabase URL + anon key are configured in-app
+(never hardcoded).
 
 Tech stack (mandatory, do not deviate without explicit user approval):
 - React Native via Expo SDK
@@ -28,11 +32,11 @@ Tech stack (mandatory, do not deviate without explicit user approval):
 - react-native-web + react-dom (desktop/web build support)
 
 Forbidden additions: Redux/MobX/Zustand-style state frameworks, ads, analytics,
-authentication beyond Supabase anonymous mode, and any backend/cloud service
-OTHER than a user-configured Supabase project. Never hardcode credentials;
-Supabase URL + anon key are entered in the in-app Settings screen. Also
-forbidden: react-native-vector-icons (use @expo/vector-icons which ships with
-Expo).
+and any backend/cloud service OTHER than a user-configured Supabase project.
+Supabase Auth is used only to identify users for optional sync and Shared
+Spaces; no other authentication provider. Never hardcode credentials; Supabase
+URL + anon key are entered in the in-app Settings screen. Also forbidden:
+react-native-vector-icons (use @expo/vector-icons which ships with Expo).
 
 ---
 
@@ -104,16 +108,26 @@ where a `.web` variant is the cleaner solution.
   - New tables: `sync_state` (Supabase URL + anon key + enabled flag + last
     sync watermark), `sync_outbox` (local changes pending upload), and
     `sync_tombstones` (deletes to propagate).
+  - Shared-space tables (`shared_spaces`, `shared_space_members`,
+    `shared_expenses`, `shared_expense_splits`, `settlements`) follow the same
+    sync rules in the same additive migration flow.
   - Change-capture is via SQLite triggers (INSERT/UPDATE/DELETE) that append
     to `sync_outbox` / `sync_tombstones` and bump `updated_at`. Triggers are
     IDEMPOTENT and guarded (no re-logging on pull-applied writes).
+- On the remote Supabase side, every exposed table has RLS enabled: personal
+  rows keyed on `user_id = auth.uid()`, shared rows on membership in the
+  related Shared Space (see `idea.txt` §12.2).
+- Personal transactions carry provenance columns (`origin_type` / `origin_id`)
+  so shared-expense-derived transactions reference their source shared expense
+  UUID without weakening per-user RLS.
 - Pulling rows reuses local integer `id` CPK but rewrites foreign keys: build
   a remote-uuid → local-id map during apply and rewrite child FK references
   (e.g. `budget_id` on `transactions`, `fixed_expense_id` on
   `month_fixed_expenses`). Never write a folder-coded parent id.
 - Queries are small named functions in `src/database/queries.ts` grouped by domain.
 - One repository module per aggregate: `months.ts`, `fixedExpenses.ts`,
-  `budgets.ts`, `transactions.ts`, `settings.ts`, `reserve.ts`.
+  `budgets.ts`, `transactions.ts`, `settings.ts`, `reserve.ts`,
+  `sharedSpaces.ts`, `sharedExpenses.ts`, `settlements.ts`.
 
 ---
 
@@ -129,7 +143,11 @@ where a `.web` variant is the cleaner solution.
   - `estimation-service.ts` — variable fixed-expense estimation strategies.
   - `forecast-service.ts` — expected month-end spending/adjustment.
   - `statistics-service.ts` — historical averages and trends.
+  - `shared-expense-service.ts` — shared balances/settlements and linked
+    personal-transaction synchronization.
 - Every function in `src/services/` must have a corresponding unit test in `tests/`.
+- Linked personal transactions are always derived from the authoritative
+  shared expense/splits; never maintained as a separately editable copy.
 
 ---
 
@@ -156,6 +174,10 @@ where a `.web` variant is the cleaner solution.
 
 - Unit tests are mandatory for every function in `src/services/`.
 - Component tests encouraged for non-trivial UI behavior.
+- Shared-expense logic must be tested through the same service/repository layers
+  (splits, balance aggregation, settlements, linked-transaction synchronization),
+  and the remote RLS policies for member vs. non-member access (see `idea.txt`
+  §12.2).
 - Run with: `npm test`.
 - Tests must be deterministic. Use explicit fixture data, no randomness.
 - Data values in tests use integer cents (e.g. `50000` for 500.00).

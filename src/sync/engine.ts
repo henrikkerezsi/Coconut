@@ -37,7 +37,9 @@ export async function syncNow(db?: SQLiteDatabase): Promise<SyncOutcome | null> 
     try {
       await updateSyncState({ lastSyncStatus: 'syncing' });
       const client = await getClient();
-      const pushResult = await pushChanges(client, database, state.lastSyncAt === null);
+      // Always re-sync the whole local database so rows that existed before
+      // change-capture triggers were installed still get uploaded.
+      const pushResult = await pushChanges(client, database, true);
       const since = state.lastSyncAt ?? EPOCH;
       const pullResult = await pullChanges(client, database, since);
       await updateSyncState({

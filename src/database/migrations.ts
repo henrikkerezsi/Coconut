@@ -59,6 +59,14 @@ END;
   return parts.join('\n');
 }
 
+function dropSyncTriggersSql(): string {
+  const names: string[] = [];
+  for (const table of Object.keys(SYNC_TABLE_SPECS)) {
+    names.push(`trg_${table}_ai`, `trg_${table}_au`, `trg_${table}_ad`);
+  }
+  return names.map((name) => `DROP TRIGGER IF EXISTS ${name};`).join('\n');
+}
+
 export const MIGRATIONS: Migration[] = [
   {
     id: 1,
@@ -198,6 +206,14 @@ ${syncTriggersSql()}
     description: 'Rename sync_state.anon_key to api_key',
     sql: `
 ALTER TABLE sync_state RENAME COLUMN anon_key TO api_key;
+`,
+  },
+  {
+    id: 9,
+    description: 'Recreate sync change-capture triggers',
+    sql: `
+${dropSyncTriggersSql()}
+${syncTriggersSql()}
 `,
   },
 ];

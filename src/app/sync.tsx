@@ -148,8 +148,12 @@ export default function SyncScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Card mode="elevated" style={styles.card}>
-        <Card.Title title="Cloud sync" subtitle="Optional — never required" />
-        <Card.Content>
+        <Card.Title
+          title="Cloud sync"
+          subtitle="Optional — never required"
+          style={styles.cardTitle}
+        />
+        <Card.Content style={styles.cardContent}>
           <PaperText variant="bodyMedium" style={styles.text}>
             Coconut is local-first: the database on this device is the source of truth and the
             app makes no network requests by default. Cloud sync lets you mirror your own data
@@ -164,6 +168,7 @@ export default function SyncScreen() {
       <Card mode="elevated" style={styles.card}>
         <Card.Title
           title="Status"
+          style={styles.cardTitle}
           right={(props) => (
             <List.Icon
               {...props}
@@ -171,7 +176,7 @@ export default function SyncScreen() {
             />
           )}
         />
-        <Card.Content>
+        <Card.Content style={styles.cardContent}>
           <List.Item
             title={syncState.enabled ? 'Sync enabled' : 'Sync disabled'}
             description="Cloud sync is off until you turn it on"
@@ -212,12 +217,13 @@ export default function SyncScreen() {
           >
             Sync now
           </Button>
+          <HelperText type="info">Sync now re-uploads your entire database, so any previously missed rows will appear.</HelperText>
         </Card.Content>
       </Card>
 
       <Card mode="elevated" style={styles.card}>
-        <Card.Title title="Supabase project" />
-        <Card.Content>
+        <Card.Title title="Supabase project" style={styles.cardTitle} />
+        <Card.Content style={styles.cardContent}>
           <PaperTextInput
             mode="outlined"
             label="Supabase URL"
@@ -272,8 +278,8 @@ export default function SyncScreen() {
       </Card>
 
       <Card mode="elevated" style={styles.card}>
-        <Card.Title title="Account" />
-        <Card.Content>
+        <Card.Title title="Account" style={styles.cardTitle} />
+        <Card.Content style={styles.cardContent}>
           {signedIn ? (
             <>
               <List.Item
@@ -345,23 +351,25 @@ export default function SyncScreen() {
       </Card>
 
       <Card mode="elevated" style={styles.card}>
-        <List.Item
-          title="Enable cloud sync"
-          description={
-            canEnable
-              ? 'Mirror your local data to Supabase and pull changes from your other devices'
-              : 'Save a Supabase URL and API key first'
-          }
-          right={() => (
-            <Switch
-              value={syncState.enabled}
-              disabled={!canEnable}
-              onValueChange={(enabled) => {
-                setSyncEnabled(enabled).catch(() => setToast('Could not update sync'));
-              }}
-            />
-          )}
-        />
+        <Card.Content style={styles.cardContent}>
+          <List.Item
+            title="Enable cloud sync"
+            description={
+              canEnable
+                ? 'Mirror your local data to Supabase and pull changes from your other devices'
+                : 'Save a Supabase URL and API key first'
+            }
+            right={() => (
+              <Switch
+                value={syncState.enabled}
+                disabled={!canEnable}
+                onValueChange={(enabled) => {
+                  setSyncEnabled(enabled).catch(() => setToast('Could not update sync'));
+                }}
+              />
+            )}
+          />
+        </Card.Content>
       </Card>
 
       <PaperText variant="bodySmall" style={styles.footnote}>
@@ -384,6 +392,13 @@ const styles = StyleSheet.create({
   },
   card: {
     marginBottom: 12,
+  },
+  cardTitle: {
+    paddingLeft: 24,
+    paddingRight: 24,
+  },
+  cardContent: {
+    paddingHorizontal: 24,
   },
   text: {
     marginBottom: 8,

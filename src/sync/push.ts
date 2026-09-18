@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { COMPLETE_ADAPTERS, SYNC_SETTINGS_KEYS, type SyncTableAdapter } from './serialize';
-import { isRemoteNewer } from './time';
+import { isRemoteNewer, nowIso } from './time';
 import { getSupabaseUserId, SyncAuthError } from './supabase';
 
 interface OutboxEntry {
@@ -27,9 +27,29 @@ async function listAllRowKeys(
   adapter: SyncTableAdapter
 ): Promise<OutboxEntry[]> {
   const rows = await db.getAllAsync<{ key: string }>(
-    `SELECT ${adapter.identityColumn} AS key FROM ${adapter.localTable}`
+    `SELECT ${adapter.identityColumn} AS key FROM ${adapter.localTable}
+      WHERE ${adapter.identityColumn} IS NOT NULL`
   );
   return rows.map((row) => ({ table_name: adapter.localTable, row_key: row.key }));
+}
+
+async function backfillSyncFields(db: SQLiteDatabase): Promise<void> {
+  // Rows created before change-capture triggers existed (or during a failed
+  // migration) may lack a uuid/updated_at. Give them one so they can be
+  // seeded and uploaded instead of being skipped silently.
+  const timestamp = nowIso();
+  for (const adapter of COMPLETE_ADAPTERS) {
+    if (adapter.identityColumn === 'month_key') {
+      continue;
+    }
+    await db.runAsync(
+      `UPDATE ${adapter.localTable}
+          SET uuid = COALESCE(uuid, lower(hex(randomblob(16)))),
+              updated_at = COALESCE(updated_at, ?)
+        WHERE uuid IS NULL OR updated_at IS NULL`,
+      [timestamp]
+    );
+  }
 }
 
 async function buildEntries(
@@ -176,7 +196,6 @@ async function pushRow(
   const payload: Record<string, unknown> = {
     user_id: userId,
     uuid: localRow.uuid ?? null,
-    month_key: localRow.month_key ?? null,
     updated_at: localUpdatedAt ?? new Date().toISOString(),
     ...adapter.toRemote(localRow, pushFkResolver(maps)),
   };
@@ -303,6 +322,7 @@ export async function pushChanges(
     throw new SyncAuthError('You must be signed in to sync.');
   }
 
+  await backfillSyncFields(db);
   const maps = await loadFkMaps(db);
   const entriesByTable = await buildEntries(db, full);
   const adapterByTable = new Map(COMPLETE_ADAPTERS.map((a) => [a.localTable, a]));

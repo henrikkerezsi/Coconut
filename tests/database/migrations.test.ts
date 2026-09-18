@@ -14,7 +14,7 @@ function applyMigrations(db: DatabaseSync, fromId: number, toId: number): void {
 
 function freshDb(): DatabaseSync {
   const db = new DatabaseSync(':memory:');
-  applyMigrations(db, 1, 9);
+  applyMigrations(db, 1, 10);
   return db;
 }
 
@@ -172,3 +172,106 @@ function freshWithoutMigration9(): DatabaseSync {
   applyMigrations(db, 1, 8);
   return db;
 }
+
+function createSpace(db: DatabaseSync, name: string): number {
+  db.exec(`INSERT INTO shared_spaces (name, owner_user_id) VALUES ('${name}', 'user-1')`);
+  const row = db
+    .prepare('SELECT id FROM shared_spaces ORDER BY id DESC LIMIT 1')
+    .get() as { id: number };
+  db.exec(
+    `INSERT INTO shared_space_members (space_id, user_id, email, role, status, joined_at)
+     VALUES (${row.id}, 'user-1', 'owner@example.com', 'owner', 'active', '2026-09-01T00:00:00.000Z')`
+  );
+  return row.id;
+}
+
+describe('shared-space change-capture triggers (migration 10)', () => {
+  it('creates shared tables and assigns uuids', () => {
+    const db = freshDb();
+    const spaceId = createSpace(db, 'Home');
+    const space = db
+      .prepare('SELECT id, uuid, updated_at FROM shared_spaces WHERE id = ?')
+      .get(spaceId) as { id: number; uuid: string | null; updated_at: string | null };
+    expect(space.uuid).toBeTruthy();
+    expect(space.updated_at).toBeTruthy();
+  });
+
+  it('logs a new space and member to the outbox keyed by uuid', () => {
+    const db = freshDb();
+    createSpace(db, 'Home');
+    const outbox = db
+      .prepare(
+        `SELECT table_name, row_key FROM sync_outbox
+          WHERE table_name IN ('shared_spaces', 'shared_space_members')
+          ORDER BY table_name`
+      )
+      .all() as Array<{ table_name: string; row_key: string }>;
+    expect(outbox).toHaveLength(2);
+    for (const row of outbox) {
+      expect(row.row_key).toBeTruthy();
+    }
+  });
+
+  it('logs an expense and its splits', () => {
+    const db = freshDb();
+    const spaceId = createSpace(db, 'Home');
+    db.exec(
+      `INSERT INTO shared_periods (space_id, start_date, status) VALUES (${spaceId}, '2026-09-01', 'open')`
+    );
+    const period = db
+      .prepare('SELECT id FROM shared_periods ORDER BY id DESC LIMIT 1')
+      .get() as { id: number };
+    const member = db
+      .prepare('SELECT id FROM shared_space_members ORDER BY id LIMIT 1')
+      .get() as { id: number };
+    db.exec(
+      `INSERT INTO shared_expenses
+         (space_id, period_id, description, total_amount_cents, date, paid_by_member_id)
+       VALUES (${spaceId}, ${period.id}, 'Rent', 100000, '2026-09-02', ${member.id})`
+    );
+    const expense = db
+      .prepare('SELECT id FROM shared_expenses ORDER BY id DESC LIMIT 1')
+      .get() as { id: number };
+    db.exec(
+      `INSERT INTO shared_expense_splits (expense_id, member_id, amount_cents)
+       VALUES (${expense.id}, ${member.id}, 100000)`
+    );
+    const outbox = db
+      .prepare(
+        `SELECT row_key FROM sync_outbox
+          WHERE table_name IN ('shared_expenses', 'shared_expense_splits')`
+      )
+      .all() as Array<{ row_key: string }>;
+    expect(outbox).toHaveLength(2);
+  });
+
+  it('logs a tombstone with the uuid on delete', () => {
+    const db = freshDb();
+    createSpace(db, 'Home');
+    const space = db
+      .prepare('SELECT id, uuid FROM shared_spaces ORDER BY id LIMIT 1')
+      .get() as { id: number; uuid: string };
+    db.exec(`DELETE FROM shared_spaces WHERE id = ${space.id}`);
+    const tombstone = db
+      .prepare(
+        `SELECT table_name, row_key, space_uuid FROM shared_sync_tombstones WHERE table_name = 'shared_spaces'`
+      )
+      .get() as { table_name: string; row_key: string; space_uuid: string | null };
+    expect(tombstone).toBeDefined();
+    expect(tombstone.row_key).toBe(space.uuid);
+    expect(tombstone.space_uuid).toBe(space.uuid);
+  });
+
+  it('does not log shared changes while a pull is in progress', () => {
+    const db = freshDb();
+    db.exec(`INSERT INTO sync_meta (key, value) VALUES ('pull_in_progress', '1')`);
+    createSpace(db, 'Home');
+    const outbox = db
+      .prepare(
+        `SELECT row_key FROM sync_outbox
+          WHERE table_name IN ('shared_spaces', 'shared_space_members')`
+      )
+      .all();
+    expect(outbox).toHaveLength(0);
+  });
+});

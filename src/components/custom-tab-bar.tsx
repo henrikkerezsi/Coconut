@@ -10,6 +10,7 @@ const TAB_ICONS: Record<string, ComponentProps<typeof MaterialCommunityIcons>['n
   index: 'home-outline',
   transactions: 'swap-horizontal',
   statistics: 'chart-bar',
+  shared: 'account-group-outline',
   settings: 'cog-outline',
 };
 

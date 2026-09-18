@@ -12,6 +12,6 @@ export const radii: RadiiScale = {
   medium: 10,
   large: 14,
   xl: 18,
-  dialog: 20,
+  dialog: 12,
   pill: 999,
 };

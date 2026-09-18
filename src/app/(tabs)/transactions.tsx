@@ -12,6 +12,7 @@ import { useAppTheme } from '../../theme';
 import { ScreenFade } from '../../components/screen-fade';
 import { FadeIn } from '../../components/fade-in';
 import { MonthSwitcher } from '../../components/month-switcher';
+import { SharedExpenseTraceLabel } from '../../components/shared-expense-trace';
 import type { MonthKey, Transaction } from '../../models';
 
 interface TransactionSection {
@@ -162,7 +163,17 @@ export default function TransactionsScreen() {
               <FadeIn>
                 <List.Item
                   title={item.merchant}
-                  description={item.note ?? undefined}
+                  description={
+                    item.originType === 'shared' ? (
+                      <SharedExpenseTraceLabel
+                        originId={item.originId ?? null}
+                        symbol={settings.currencySymbol}
+                        fallback={item.note ?? 'Shared expense'}
+                      />
+                    ) : (
+                      item.note ?? undefined
+                    )
+                  }
                   left={(props) => (
                     <List.Icon
                       {...props}

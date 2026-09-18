@@ -135,6 +135,32 @@ export async function ensureCurrentMonth(db?: SQLiteDatabase): Promise<Month> {
   return month;
 }
 
+export async function ensureMonth(
+  monthKey: MonthKey,
+  db?: SQLiteDatabase
+): Promise<Month> {
+  const database = db ?? (await getDatabase());
+  const existing = await getMonth(monthKey, database);
+  if (existing) {
+    return existing;
+  }
+  const settings = await getSettings(database);
+  const startingReserve = await computeStartingReserve(monthKey, database);
+  await insertMonth(
+    {
+      monthKey,
+      allowanceCents: settings.monthlyAllowanceCents,
+      startingReserveCents: startingReserve,
+    },
+    database
+  );
+  const month = await getMonth(monthKey, database);
+  if (!month) {
+    throw new Error(`Failed to create month ${monthKey}`);
+  }
+  return month;
+}
+
 export async function materializeMonth(
   monthKey: MonthKey,
   db?: SQLiteDatabase

@@ -34,7 +34,7 @@ export interface SyncTableAdapter {
   fromRemote(row: RemoteRow, fk: FkToLocal): LocalRow;
 }
 
-interface AdapterOptions {
+export interface AdapterOptions {
   localTable: string;
   remoteTable: string;
   pullOrder: number;
@@ -43,7 +43,7 @@ interface AdapterOptions {
   naturalKeys?: string[];
 }
 
-function makeAdapter(options: AdapterOptions): SyncTableAdapter {
+export function makeAdapter(options: AdapterOptions): SyncTableAdapter {
   const { localTable, remoteTable, pullOrder, identityColumn, fields, naturalKeys } = options;
   return {
     localTable,

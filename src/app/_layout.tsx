@@ -61,6 +61,12 @@ function ThemedContent() {
           />
           <Stack.Screen name="about" options={{ title: 'About', headerShown: false }} />
           <Stack.Screen name="sync" options={{ title: 'Cloud Sync' }} />
+          <Stack.Screen
+            name="shared/expense"
+            options={{ title: 'Shared Expense', presentation: 'modal' }}
+          />
+          <Stack.Screen name="shared/report/[id]" options={{ title: 'Shared Report' }} />
+          <Stack.Screen name="shared/balances" options={{ title: 'Balances' }} />
           <Stack.Screen name="whats-new" options={{ title: "What's New", headerShown: false }} />
           <Stack.Screen name="monthly-history" options={{ title: 'Monthly History' }} />
           <Stack.Screen name="monthly-report/[monthKey]" options={{ title: 'Monthly Report' }} />

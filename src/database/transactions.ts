@@ -14,10 +14,12 @@ interface TransactionRow {
   attachment_name: string | null;
   attachment_mime: string | null;
   attachment: ArrayBuffer | Uint8Array | null;
+  origin_type: string | null;
+  origin_id: string | null;
 }
 
 const LIST_COLUMNS =
-  'id, month_key, date, amount_cents, budget_id, merchant, note, created_at, attachment_name, attachment_mime';
+  'id, month_key, date, amount_cents, budget_id, merchant, note, created_at, attachment_name, attachment_mime, origin_type, origin_id';
 
 function rowToTransaction(row: TransactionRow): Transaction {
   return {
@@ -31,6 +33,8 @@ function rowToTransaction(row: TransactionRow): Transaction {
     attachmentName: row.attachment_name ?? null,
     attachmentMime: row.attachment_mime ?? null,
     attachment: row.attachment ? new Uint8Array(row.attachment) : null,
+    originType: row.origin_type ?? null,
+    originId: row.origin_id ?? null,
   };
 }
 
@@ -139,4 +143,62 @@ export async function getAllTransactions(db?: SQLiteDatabase): Promise<Transacti
     `SELECT ${LIST_COLUMNS} FROM transactions ORDER BY date ASC, id ASC`
   );
   return rows.map(rowToTransaction);
+}
+
+export async function getTransactionByOrigin(
+  originId: string,
+  db?: SQLiteDatabase
+): Promise<Transaction | null> {
+  const database = db ?? (await getDatabase());
+  const row = await database.getFirstAsync<TransactionRow>(
+    `SELECT ${LIST_COLUMNS} FROM transactions WHERE origin_type = 'shared' AND origin_id = ? LIMIT 1`,
+    [originId]
+  );
+  return row ? rowToTransaction(row) : null;
+}
+
+export async function upsertSharedTransaction(
+  originId: string,
+  input: TransactionInput,
+  db?: SQLiteDatabase
+): Promise<number> {
+  const database = db ?? (await getDatabase());
+  const existing = await database.getFirstAsync<{ id: number }>(
+    `SELECT id FROM transactions WHERE origin_type = 'shared' AND origin_id = ? LIMIT 1`,
+    [originId]
+  );
+  if (existing) {
+    await updateTransaction(existing.id, input, database);
+    return existing.id;
+  }
+  const monthKey = monthKeyOf(input.date);
+  const result = await database.runAsync(
+    `INSERT INTO transactions
+       (month_key, date, amount_cents, budget_id, merchant, note, attachment_name, attachment_mime, attachment, origin_type, origin_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'shared', ?)`,
+    [
+      monthKey,
+      input.date,
+      input.amountCents,
+      input.budgetId,
+      input.merchant,
+      input.note,
+      input.attachment?.name ?? null,
+      input.attachment?.mime ?? null,
+      input.attachment?.bytes ?? null,
+      originId,
+    ]
+  );
+  return result.lastInsertRowId;
+}
+
+export async function deleteSharedTransaction(
+  originId: string,
+  db?: SQLiteDatabase
+): Promise<void> {
+  const database = db ?? (await getDatabase());
+  await database.runAsync(
+    "DELETE FROM transactions WHERE origin_type = 'shared' AND origin_id = ?",
+    [originId]
+  );
 }

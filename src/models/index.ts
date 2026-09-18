@@ -80,6 +80,8 @@ export interface Transaction {
   attachmentName: string | null;
   attachmentMime: string | null;
   attachment: Uint8Array | null;
+  originType?: string | null;
+  originId?: string | null;
 }
 
 export interface Income {
@@ -132,4 +134,136 @@ export interface ReserveSnapshot {
 export interface ReserveAdjustment {
   adjustmentCents: number;
   overspent: boolean;
+}
+
+export type SharedMemberRole = 'owner' | 'member';
+
+export type SharedMemberStatus = 'pending' | 'active' | 'left';
+
+export type SharedPeriodStatus = 'open' | 'closed';
+
+export type SharedSplitMethod = 'equal' | 'exact' | 'percentage';
+
+export interface SharedSpace {
+  id: number;
+  uuid: string | null;
+  name: string;
+  ownerUserId: string | null;
+  createdAt: string;
+  updatedAt: string | null;
+  deleted: boolean;
+}
+
+export interface SharedSpaceMember {
+  id: number;
+  uuid: string | null;
+  spaceId: number;
+  userId: string | null;
+  email: string | null;
+  displayName: string | null;
+  role: SharedMemberRole;
+  status: SharedMemberStatus;
+  joinedAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface SharedPeriod {
+  id: number;
+  uuid: string | null;
+  spaceId: number;
+  startDate: string;
+  endDate: string | null;
+  status: SharedPeriodStatus;
+  createdAt: string;
+  updatedAt: string | null;
+}
+
+export interface SharedExpense {
+  id: number;
+  uuid: string | null;
+  spaceId: number;
+  periodId: number;
+  description: string;
+  totalAmountCents: number;
+  date: string;
+  paidByMemberId: number;
+  note: string | null;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string | null;
+  deleted: boolean;
+}
+
+export interface SharedExpenseSplit {
+  id: number;
+  uuid: string | null;
+  expenseId: number;
+  memberId: number;
+  amountCents: number;
+  updatedAt: string | null;
+}
+
+export interface SharedExpenseWithSplits {
+  expense: SharedExpense;
+  splits: SharedExpenseSplit[];
+}
+
+export interface SharedBalance {
+  memberId: number;
+  paidCents: number;
+  owedCents: number;
+  netCents: number;
+}
+
+export interface SharedSettlement {
+  fromMemberId: number;
+  toMemberId: number;
+  amountCents: number;
+}
+
+export interface SharedReportExpense {
+  description: string;
+  date: string;
+  totalAmountCents: number;
+  paidByMemberId: number;
+  splits: { memberId: number; amountCents: number }[];
+}
+
+export interface SharedReportMemberTotal {
+  memberId: number;
+  paidCents: number;
+}
+
+export interface SharedPeriodReportData {
+  spaceName: string;
+  periodStart: string;
+  periodEnd: string;
+  closedAt: string;
+  expenses: SharedReportExpense[];
+  memberTotals: SharedReportMemberTotal[];
+  balances: SharedBalance[];
+  settlements: SharedSettlement[];
+}
+
+export interface SharedPeriodReport {
+  id: number;
+  uuid: string | null;
+  spaceId: number;
+  periodId: number;
+  report: SharedPeriodReportData;
+  closedAt: string;
+  closedByMemberId: number | null;
+  updatedAt: string | null;
+}
+
+export interface SharedSplitInput {
+  memberId: number;
+  amountCents?: number;
+  basisPoints?: number;
+  selected?: boolean;
+}
+
+export interface SharedSplitRecord {
+  memberId: number;
+  amountCents: number;
 }

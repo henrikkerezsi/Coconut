@@ -8,9 +8,10 @@ import { DAYJS_STORE_DATE_FORMAT } from '../utils/date';
 interface DateFieldProps {
   value: string;
   onChange: (isoDate: string) => void;
+  disabled?: boolean;
 }
 
-export function DateField({ value, onChange }: DateFieldProps) {
+export function DateField({ value, onChange, disabled = false }: DateFieldProps) {
   const [show, setShow] = useState(false);
 
   const handleChange = (event: DateTimePickerEvent, selected?: Date) => {
@@ -22,7 +23,11 @@ export function DateField({ value, onChange }: DateFieldProps) {
 
   return (
     <>
-      <TouchableOpacity onPress={() => setShow(true)} style={styles.field}>
+      <TouchableOpacity
+        onPress={() => setShow(!disabled)}
+        style={styles.field}
+        accessibilityState={{ disabled }}
+      >
         <Text variant="bodyLarge" style={styles.value}>
           {dayjs(value).format('ddd, D MMM YYYY')}
         </Text>

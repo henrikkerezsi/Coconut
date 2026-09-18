@@ -219,4 +219,5 @@ export const SYNC_SETTINGS_KEYS = [
   'currency_symbol',
   'theme_mode',
   'recent_transactions_count',
+  'username',
 ] as const;

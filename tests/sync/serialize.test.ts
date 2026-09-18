@@ -145,6 +145,7 @@ describe('row serialization', () => {
       'currency_symbol',
       'theme_mode',
       'recent_transactions_count',
+      'username',
     ]);
     expect(SYNC_SETTINGS_KEYS as readonly string[]).not.toContain('tutorial_seen');
   });

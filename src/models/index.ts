@@ -12,6 +12,7 @@ export interface Settings {
   currencySymbol: string;
   themeMode: 'light' | 'dark' | 'system';
   recentTransactionsCount: number;
+  username: string | null;
 }
 
 export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';

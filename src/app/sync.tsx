@@ -25,6 +25,7 @@ import {
   signUpToSupabase,
 } from '../sync/supabase';
 import { syncNow } from '../sync/engine';
+import { setMemberDisplayNameForUser } from '../database/sharedSpaces';
 
 function statusLabel(lastSyncStatus: SyncStatus | null): string {
   switch (lastSyncStatus) {
@@ -40,13 +41,15 @@ function statusLabel(lastSyncStatus: SyncStatus | null): string {
 }
 
 export default function SyncScreen() {
-  const { ready, syncState, saveSyncConfig, setSyncEnabled, refresh } = useAppData();
+  const { ready, syncState, saveSyncConfig, setSyncEnabled, refresh, settings, setUsername } =
+    useAppData();
   const theme = useAppTheme();
   const [urlDraft, setUrlDraft] = useState(syncState.supabaseUrl ?? '');
   const [keyDraft, setKeyDraft] = useState(syncState.apiKey ?? '');
   const [sessionUser, setSessionUser] = useState<User | null>(null);
   const [emailDraft, setEmailDraft] = useState('');
   const [passwordDraft, setPasswordDraft] = useState('');
+  const [usernameDraft, setUsernameDraft] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -140,6 +143,24 @@ export default function SyncScreen() {
       setToast('Signed out');
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Sign out failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveUsername(): Promise<void> {
+    const trimmed = (usernameDraft ?? '').trim();
+    const normalized = trimmed === '' ? null : trimmed;
+    setBusy(true);
+    try {
+      await setUsername(normalized);
+      if (sessionUser) {
+        await setMemberDisplayNameForUser(sessionUser.id, normalized);
+      }
+      setUsernameDraft(null);
+      setToast('Username saved');
+    } catch {
+      setToast('Could not save the username');
     } finally {
       setBusy(false);
     }
@@ -349,6 +370,38 @@ export default function SyncScreen() {
           )}
         </Card.Content>
       </Card>
+
+      {signedIn ? (
+        <Card mode="elevated" style={styles.card}>
+          <Card.Title title="Username (optional)" style={styles.cardTitle} />
+          <Card.Content style={styles.cardContent}>
+            <PaperTextInput
+              mode="outlined"
+              label="Username"
+              value={usernameDraft ?? settings.username ?? ''}
+              onChangeText={setUsernameDraft}
+              placeholder={sessionUser.email ?? ''}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={styles.input}
+            />
+            <Button
+              mode="contained"
+              icon="account-edit-outline"
+              onPress={saveUsername}
+              disabled={busy}
+              loading={busy}
+              style={styles.button}
+            >
+              Save username
+            </Button>
+            <PaperText variant="bodySmall" style={styles.hint}>
+              Shown as your name on shared expenses. Your email is shown instead when no username
+              is set.
+            </PaperText>
+          </Card.Content>
+        </Card>
+      ) : null}
 
       <Card mode="elevated" style={styles.card}>
         <Card.Content style={styles.cardContent}>

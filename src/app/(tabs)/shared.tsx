@@ -190,6 +190,7 @@ export default function SharedScreen() {
         name: spaceName.trim(),
         ownerUserId: sessionUser.id,
         ownerEmail: sessionUser.email ?? null,
+        ownerDisplayName: settings.username ?? null,
       });
       await ensureOpenPeriod(id);
       selectedRef.current = id;
@@ -230,7 +231,7 @@ export default function SharedScreen() {
     }
     setBusy(true);
     try {
-      await acceptInvite(member.id, sessionUser.id, sessionUser.email ?? null);
+      await acceptInvite(member.id, sessionUser.id, settings.username ?? null);
       await ensureOpenPeriod(member.spaceId);
       selectedRef.current = member.spaceId;
       const space = await getSharedSpace(member.spaceId);

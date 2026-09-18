@@ -72,8 +72,20 @@ export async function getSharedSpace(
   return row ? rowToSpace(row) : null;
 }
 
+export async function setMemberDisplayNameForUser(
+  userId: string,
+  displayName: string | null,
+  db?: SQLiteDatabase
+): Promise<void> {
+  const database = db ?? (await getDatabase());
+  await database.runAsync('UPDATE shared_space_members SET display_name = ? WHERE user_id = ?', [
+    displayName,
+    userId,
+  ]);
+}
+
 export async function createSharedSpace(
-  input: { name: string; ownerUserId: string | null; ownerEmail: string | null },
+  input: { name: string; ownerUserId: string | null; ownerEmail: string | null; ownerDisplayName: string | null },
   db?: SQLiteDatabase
 ): Promise<number> {
   const database = db ?? (await getDatabase());
@@ -85,9 +97,9 @@ export async function createSharedSpace(
     );
     spaceId = result.lastInsertRowId;
     await database.runAsync(
-      `INSERT INTO shared_space_members (space_id, user_id, email, role, status, joined_at)
-       VALUES (?, ?, ?, 'owner', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`,
-      [spaceId, input.ownerUserId, input.ownerEmail]
+      `INSERT INTO shared_space_members (space_id, user_id, email, display_name, role, status, joined_at)
+       VALUES (?, ?, ?, ?, 'owner', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`,
+      [spaceId, input.ownerUserId, input.ownerEmail, input.ownerDisplayName]
     );
   });
   return spaceId;

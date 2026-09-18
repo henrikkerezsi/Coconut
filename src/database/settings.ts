@@ -8,6 +8,7 @@ export const DEFAULT_SETTINGS: Settings = {
   currencySymbol: '€',
   themeMode: 'system',
   recentTransactionsCount: 5,
+  username: null,
 };
 
 type SettingsKey =
@@ -15,7 +16,8 @@ type SettingsKey =
   | 'initial_reserve_cents'
   | 'currency_symbol'
   | 'theme_mode'
-  | 'recent_transactions_count';
+  | 'recent_transactions_count'
+  | 'username';
 
 const SETTINGS_KEY_MAP: Record<keyof Settings, SettingsKey> = {
   monthlyAllowanceCents: 'monthly_allowance_cents',
@@ -23,6 +25,7 @@ const SETTINGS_KEY_MAP: Record<keyof Settings, SettingsKey> = {
   currencySymbol: 'currency_symbol',
   themeMode: 'theme_mode',
   recentTransactionsCount: 'recent_transactions_count',
+  username: 'username',
 };
 
 function rowToSettings(
@@ -49,6 +52,9 @@ function rowToSettings(
       case 'recent_transactions_count':
         settings.recentTransactionsCount = Math.max(1, Math.min(50, Number(row.value)));
         break;
+      case 'username':
+        settings.username = row.value === '' ? null : row.value;
+        break;
     }
   }
   return settings;
@@ -71,7 +77,7 @@ export async function updateSettings(
   const next: Settings = { ...current, ...patch };
   for (const key of Object.keys(next) as (keyof Settings)[]) {
     const dbKey = SETTINGS_KEY_MAP[key];
-    const value = String(next[key]);
+    const value = next[key] === null ? '' : String(next[key]);
     await database.runAsync(
       `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
        ON CONFLICT (key) DO UPDATE SET value = excluded.value,

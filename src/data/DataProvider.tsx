@@ -127,6 +127,7 @@ interface AppData {
   setCurrencySymbol: (symbol: string) => Promise<void>;
   setThemeMode: (mode: Settings['themeMode']) => Promise<void>;
   setRecentTransactionsCount: (count: number) => Promise<void>;
+  setUsername: (username: string | null) => Promise<void>;
   saveSyncConfig: (supabaseUrl: string, apiKey: string) => Promise<boolean>;
   setSyncEnabled: (enabled: boolean) => Promise<void>;
   addFixedExpense: (input: Omit<FixedExpense, 'id'>) => Promise<void>;
@@ -240,6 +241,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     currencySymbol: '€',
     themeMode: 'system',
     recentTransactionsCount: 5,
+    username: null,
   });
   const [syncState, setSyncState] = useState<SyncState>({
     supabaseUrl: null,
@@ -331,6 +333,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setRecentTransactionsCount: async (count) => {
         const db = await getDatabase();
         await updateSettings({ recentTransactionsCount: count }, db);
+        await refresh();
+      },
+      setUsername: async (username) => {
+        const db = await getDatabase();
+        await updateSettings({ username }, db);
         await refresh();
       },
       saveSyncConfig: async (supabaseUrl, apiKey) => {

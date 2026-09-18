@@ -73,7 +73,9 @@ export async function updateSettings(
     const dbKey = SETTINGS_KEY_MAP[key];
     const value = String(next[key]);
     await database.runAsync(
-      'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value',
+      `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+       ON CONFLICT (key) DO UPDATE SET value = excluded.value,
+                                       updated_at = excluded.updated_at`,
       [dbKey, value]
     );
   }

@@ -14,6 +14,16 @@ export interface Settings {
   recentTransactionsCount: number;
 }
 
+export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
+
+export interface SyncState {
+  supabaseUrl: string | null;
+  apiKey: string | null;
+  enabled: boolean;
+  lastSyncAt: string | null;
+  lastSyncStatus: SyncStatus | null;
+}
+
 export interface Month {
   monthKey: MonthKey;
   allowanceCents: number;

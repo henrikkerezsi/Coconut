@@ -1,0 +1,70 @@
+import type { SQLiteDatabase } from 'expo-sqlite';
+
+import { getDatabase } from '../database/database';
+import { getSyncState, updateSyncState } from '../database/syncState';
+import { pushChanges, type PushResult } from './push';
+import { pullChanges, type PullResult } from './pull';
+import { getSupabaseSessionUser, getClient, SyncAuthError } from './supabase';
+import { nowIso } from './time';
+
+const EPOCH = '1970-01-01T00:00:00.000Z';
+
+export interface SyncOutcome {
+  pushed: PushResult;
+  pulled: PullResult;
+}
+
+let syncInProgress: Promise<SyncOutcome | null> | null = null;
+
+export async function isSyncRunning(): Promise<boolean> {
+  return syncInProgress !== null;
+}
+
+export async function syncNow(db?: SQLiteDatabase): Promise<SyncOutcome | null> {
+  if (syncInProgress) {
+    return syncInProgress;
+  }
+  syncInProgress = (async () => {
+    const database = db ?? (await getDatabase());
+    const state = await getSyncState(database);
+    if (!state.enabled) {
+      return null;
+    }
+    const user = await getSupabaseSessionUser();
+    if (!user) {
+      return null;
+    }
+    try {
+      await updateSyncState({ lastSyncStatus: 'syncing' });
+      const client = await getClient();
+      const pushResult = await pushChanges(client, database, state.lastSyncAt === null);
+      const since = state.lastSyncAt ?? EPOCH;
+      const pullResult = await pullChanges(client, database, since);
+      await updateSyncState({
+        lastSyncAt: nowIso(),
+        lastSyncStatus: 'success',
+      });
+      return { pushed: pushResult, pulled: pullResult };
+    } catch (error) {
+      if (error instanceof SyncAuthError) {
+        return null;
+      }
+      const message = error instanceof Error ? error.message : 'Unknown sync error';
+      await updateSyncState({ lastSyncStatus: 'error' });
+      throw new SyncError(message);
+    }
+  })();
+  try {
+    const outcome = await syncInProgress;
+    return outcome;
+  } finally {
+    syncInProgress = null;
+  }
+}
+
+export class SyncError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SyncError';
+  }
+}

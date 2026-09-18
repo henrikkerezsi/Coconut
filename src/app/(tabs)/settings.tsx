@@ -92,6 +92,12 @@ export default function SettingsScreen() {
           left={(props) => <List.Icon {...props} icon="database-export-outline" />}
           onPress={() => router.push('/planning/backup')}
         />
+        <List.Item
+          title="Cloud sync"
+          description="Optional sync to your own Supabase project"
+          left={(props) => <List.Icon {...props} icon="cloud-sync-outline" />}
+          onPress={() => router.push('/sync')}
+        />
       </List.Section>
 
       <List.Section>

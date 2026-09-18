@@ -23,11 +23,12 @@ truth. The app works fully offline and makes **zero network requests** by defaul
 no backend, no account system, no advertising, and no analytics unless you opt in.
 
 Optional shared expenses: two or more authenticated Coconut users (typically a couple)
-can connect in a Shared Space to track shared expenses, each split into explicit per-person
-amounts. A shared expense automatically generates each participant's linked personal
-transaction — its amount is always derived from that person's split, so the shared record
-and the personal budgets never drift apart. Balances are calculated from expenses and
-settlements and shown as a single net amount.
+can connect in a Shared Space and track shared expenses within a Shared Period — each
+expense carries explicit per-person split amounts. When a period is closed, Coconut
+auto-generates a permanent closing report (who paid, each share, each member's paid
+total, and the net who-owes-whom settlement). A shared expense automatically generates
+each participant's linked personal transaction — its amount is always derived from that
+person's split, so the shared record and the personal budgets never drift apart.
 
 ## Key features
 
@@ -39,7 +40,7 @@ settlements and shown as a single net amount.
 - **Savings reserve** — start/end balance per month, transfers between the reserve and the month, and a month-end surplus that moves into savings automatically. A positive adjustment means you saved; a negative one means spending drew from the reserve.
 - **Transactions** — unlimited entries tagged to a budget (with merchant-based budget suggestions) and optional photo attachments.
 - **Statistics** — spending trends, averages, reserve development, and per-category performance over time.
-- **Shared expenses** — create a Shared Space with one or more trusted users, add expenses with arbitrary per-person splits, see who owes whom a single net amount, and record settlements. Each participant gets an automatically-maintained linked personal transaction.
+- **Shared expenses** — create a Shared Space with one or more trusted users and track expenses with arbitrary per-person splits inside a Shared Period. Closing a period auto-generates a permanent report (who paid, who owes whom); each participant gets an automatically-maintained linked personal transaction.
 - **Overview home screen** — reserve balance, allowance/income/spent/remaining at a glance, and cards for fixed expenses, flexible budgets, income and yearly subscriptions.
 - **Theme** — Material Design 3 with light, dark and system appearances.
 - **Backup & restore** — export your whole database to a portable file, or restore from one.

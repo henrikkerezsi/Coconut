@@ -16,12 +16,15 @@ import type {
   MonthKey,
   ReserveTransfer,
   Settings,
+  SyncState,
   Transaction,
   YearlySubscription,
 } from '../models';
 import { currentMonthKey } from '../utils/date';
 import { getDatabase } from '../database/database';
 import { getSettings, updateSettings } from '../database/settings';
+import { getSyncState, updateSyncState } from '../database/syncState';
+import { isValidApiKey, normalizeSupabaseUrl } from '../services/sync-service';
 import {
   closeMonth as persistCloseMonth,
   ensureCurrentMonth,
@@ -73,6 +76,7 @@ import {
   upsertMerchantSuggestion,
 } from '../database/reserve';
 import { getMonthData } from '../database/queries';
+import { syncNow } from '../sync/engine';
 import { projectReserve, type ReserveProjection } from '../services/reserve-service';
 import {
   budgetStatus,
@@ -109,6 +113,7 @@ export interface MonthDashboard {
 interface AppData {
   ready: boolean;
   settings: Settings;
+  syncState: SyncState;
   recentTransactions: Transaction[];
   currentMonth: Month | null;
   currentDashboard: MonthDashboard | null;
@@ -122,6 +127,8 @@ interface AppData {
   setCurrencySymbol: (symbol: string) => Promise<void>;
   setThemeMode: (mode: Settings['themeMode']) => Promise<void>;
   setRecentTransactionsCount: (count: number) => Promise<void>;
+  saveSyncConfig: (supabaseUrl: string, apiKey: string) => Promise<boolean>;
+  setSyncEnabled: (enabled: boolean) => Promise<void>;
   addFixedExpense: (input: Omit<FixedExpense, 'id'>) => Promise<void>;
   saveFixedExpense: (id: number, input: Omit<FixedExpense, 'id'>) => Promise<void>;
   removeFixedExpense: (id: number) => Promise<void>;
@@ -234,6 +241,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     themeMode: 'system',
     recentTransactionsCount: 5,
   });
+  const [syncState, setSyncState] = useState<SyncState>({
+    supabaseUrl: null,
+    apiKey: null,
+    enabled: false,
+    lastSyncAt: null,
+    lastSyncStatus: null,
+  });
   const [currentMonth, setCurrentMonth] = useState<Month | null>(null);
   const [currentDashboard, setCurrentDashboard] = useState<MonthDashboard | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
@@ -248,6 +262,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     const nextSettings = await getSettings(db);
     setSettings(nextSettings);
+    setSyncState(await getSyncState(db));
 
     const monthKey = currentMonthKey();
     setCurrentMonth(await getMonth(monthKey, db));
@@ -257,6 +272,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setBudgets(await getAllBudgets(db));
     setAllSubscriptions(await getAllYearlySubscriptions(db));
     setAllMonths(await getAllMonths(db));
+    void syncNow().catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -279,6 +295,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return {
       ready,
       settings,
+      syncState,
       recentTransactions,
       currentMonth,
       currentDashboard,
@@ -314,6 +331,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setRecentTransactionsCount: async (count) => {
         const db = await getDatabase();
         await updateSettings({ recentTransactionsCount: count }, db);
+        await refresh();
+      },
+      saveSyncConfig: async (supabaseUrl, apiKey) => {
+        const normalizedUrl = normalizeSupabaseUrl(supabaseUrl);
+        if (normalizedUrl === null || !isValidApiKey(apiKey)) {
+          return false;
+        }
+        const db = await getDatabase();
+        await updateSyncState({ supabaseUrl: normalizedUrl, apiKey: apiKey.trim() }, db);
+        await refresh();
+        return true;
+      },
+      setSyncEnabled: async (enabled) => {
+        const db = await getDatabase();
+        await updateSyncState({ enabled }, db);
         await refresh();
       },
       addFixedExpense: async (input) => {
@@ -434,7 +466,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       },
       refresh,
     };
-  }, [ready, settings, recentTransactions, currentMonth, currentDashboard, allFixedExpenses, budgets, allSubscriptions, allMonths, refresh]);
+  }, [ready, settings, syncState, recentTransactions, currentMonth, currentDashboard, allFixedExpenses, budgets, allSubscriptions, allMonths, refresh]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

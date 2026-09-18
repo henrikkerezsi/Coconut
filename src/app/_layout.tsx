@@ -60,6 +60,7 @@ function ThemedContent() {
             options={{ title: 'Subscription', headerShown: false }}
           />
           <Stack.Screen name="about" options={{ title: 'About', headerShown: false }} />
+          <Stack.Screen name="sync" options={{ title: 'Cloud Sync' }} />
           <Stack.Screen name="whats-new" options={{ title: "What's New", headerShown: false }} />
           <Stack.Screen name="monthly-history" options={{ title: 'Monthly History' }} />
           <Stack.Screen name="monthly-report/[monthKey]" options={{ title: 'Monthly Report' }} />

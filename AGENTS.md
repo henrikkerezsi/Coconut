@@ -17,8 +17,8 @@ Optional sync: the user's own Supabase project is the ONLY permitted backend,
 used for (a) opt-in row-level synchronization of personal data and (b) Shared
 Spaces, where separate Supabase Auth users exchange shared expenses via RLS
 policies (see `idea.txt` §11–12). It is local-first: with sync disabled the app
-makes zero network requests. Supabase URL + anon key are configured in-app
-(never hardcoded).
+makes zero network requests. Supabase URL + API key (publishable key, or the
+legacy anon key) are configured in-app (never hardcoded).
 
 Tech stack (mandatory, do not deviate without explicit user approval):
 - React Native via Expo SDK
@@ -35,7 +35,8 @@ Forbidden additions: Redux/MobX/Zustand-style state frameworks, ads, analytics,
 and any backend/cloud service OTHER than a user-configured Supabase project.
 Supabase Auth is used only to identify users for optional sync and Shared
 Spaces; no other authentication provider. Never hardcode credentials; Supabase
-URL + anon key are entered in the in-app Settings screen. Also forbidden:
+URL + API key (publishable key, or the legacy anon key) are entered in the
+in-app Settings screen. Also forbidden:
 react-native-vector-icons (use @expo/vector-icons which ships with Expo).
 
 ---
@@ -58,7 +59,7 @@ Do NOT implement things the user has not asked for.
 ```
 src/
 ├── app/           # Expo Router screens and layouts (file-based routing)
-│   ├── (tabs)/    # Tab navigation: overview, transactions, statistics, settings
+│   ├── (tabs)/    # Tab navigation: overview, transactions, statistics, shared, settings
 │   └── _layout.tsx
 ├── components/    # Reusable UI components (React Native Paper based)
 ├── database/      # SQLite schema, migrations, and data-access layer
@@ -105,12 +106,13 @@ where a `.web` variant is the cleaner solution.
   - Every sync-facing data table gets `uuid TEXT` and `updated_at TEXT`
     columns plus a `uuid` UNIQUE index. `uuid` is stable across devices and is
     the sync identity; the local integer `id` stays device-scoped.
-  - New tables: `sync_state` (Supabase URL + anon key + enabled flag + last
+  - New tables: `sync_state` (Supabase URL + API key + enabled flag + last
     sync watermark), `sync_outbox` (local changes pending upload), and
     `sync_tombstones` (deletes to propagate).
   - Shared-space tables (`shared_spaces`, `shared_space_members`,
-    `shared_expenses`, `shared_expense_splits`, `settlements`) follow the same
-    sync rules in the same additive migration flow.
+    `shared_periods`, `shared_expenses`, `shared_expense_splits`,
+    `shared_period_reports`) follow the same sync rules in the same additive
+    migration flow.
   - Change-capture is via SQLite triggers (INSERT/UPDATE/DELETE) that append
     to `sync_outbox` / `sync_tombstones` and bump `updated_at`. Triggers are
     IDEMPOTENT and guarded (no re-logging on pull-applied writes).
@@ -127,7 +129,7 @@ where a `.web` variant is the cleaner solution.
 - Queries are small named functions in `src/database/queries.ts` grouped by domain.
 - One repository module per aggregate: `months.ts`, `fixedExpenses.ts`,
   `budgets.ts`, `transactions.ts`, `settings.ts`, `reserve.ts`,
-  `sharedSpaces.ts`, `sharedExpenses.ts`, `settlements.ts`.
+  `sharedSpaces.ts`, `sharedPeriods.ts`, `sharedExpenses.ts`.
 
 ---
 
@@ -143,8 +145,8 @@ where a `.web` variant is the cleaner solution.
   - `estimation-service.ts` — variable fixed-expense estimation strategies.
   - `forecast-service.ts` — expected month-end spending/adjustment.
   - `statistics-service.ts` — historical averages and trends.
-  - `shared-expense-service.ts` — shared balances/settlements and linked
-    personal-transaction synchronization.
+  - `shared-expense-service.ts` — shared periods, closing reports, derived
+    balances, and linked personal-transaction synchronization.
 - Every function in `src/services/` must have a corresponding unit test in `tests/`.
 - Linked personal transactions are always derived from the authoritative
   shared expense/splits; never maintained as a separately editable copy.
@@ -175,9 +177,9 @@ where a `.web` variant is the cleaner solution.
 - Unit tests are mandatory for every function in `src/services/`.
 - Component tests encouraged for non-trivial UI behavior.
 - Shared-expense logic must be tested through the same service/repository layers
-  (splits, balance aggregation, settlements, linked-transaction synchronization),
-  and the remote RLS policies for member vs. non-member access (see `idea.txt`
-  §12.2).
+  (splits, balance aggregation, period-closing reports, linked-transaction
+  synchronization), and the remote RLS policies for member vs. non-member access
+  (see `idea.txt` §12.2).
 - Run with: `npm test`.
 - Tests must be deterministic. Use explicit fixture data, no randomness.
 - Data values in tests use integer cents (e.g. `50000` for 500.00).

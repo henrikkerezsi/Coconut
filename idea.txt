@@ -221,6 +221,15 @@ Historical financial information and trends:
 
 Focused on useful personal budgeting information, not comprehensive financial analytics.
 
+### Shared
+Bottom-bar tab for Shared Spaces:
+- Space members and the open Shared Period (start date — now), with only that period's
+  expenses listed like transactions.
+- A prominent "Close Period" action that generates the closing report (who paid, each
+  share, each member's paid total, net who-owes-whom). Accepted: period closed and
+  immutable, report stored; cancelled: period stays open.
+- Read-only access to all past closing reports.
+
 ### Settings / Planning
 Configuration for:
 - Monthly allowance.
@@ -307,8 +316,13 @@ personal dataset is available across their own devices.
 ### 12.1 Concept
 
 Each user keeps an independent Coconut account and personal financial system. A Shared
-Space connects two or more authenticated Coconut users (initial use case: a couple
-sharing expenses) and holds shared expenses, their splits, and settlements.
+Space connects two or more authenticated Coconut users (typically a couple) and holds
+shared expenses, their splits, and period-closing reports.
+
+An expense belongs to a **Shared Period**. A period opens when the space starts or the
+previous period closes, and stays open until it is settled. Members record expenses in the
+current open period; closing a period settles it permanently and immediately opens the
+next one.
 
 The shared-expense relationship is authoritative:
 
@@ -335,25 +349,37 @@ Supabase Row Level Security distinguishes personal rows from shared rows:
 - Shared rows: `auth.uid()` is a member of the relevant Shared Space.
 
 A user cannot read or write another user's personal rows, join a space arbitrarily, or
-create expenses/splits/settlements for users outside the space. Every new exposed table
-has RLS enabled, and member vs. non-member RLS behavior is tested.
+create expenses/splits for users outside the space. Every new exposed table has RLS
+enabled, and member vs. non-member RLS behavior is tested.
 
 ### 12.3 Database model
 
 Adapted with additive, incremental migrations only; existing personal data stays intact.
+Shared balances are derived from explicit states, never stored as mutable amounts.
 
 - `shared_spaces` — name, creator, timestamps, deleted flag.
 - `shared_space_members` — space, user, role (`owner`/`member`), joined; unique
   `(space_id, user_id)`.
-- `shared_expenses` — space, description, total amount, date, paid by (a member), note,
-  creator, timestamps, deleted flag.
+- `shared_periods` — space, start date, end date (null while open), status
+  (`open`/`closed`), timestamps. Contiguous: the next period starts where the previous
+  one closed.
+- `shared_expenses` — period, description, total amount, date, paid by (a member of that
+  period), note, creator, timestamps, deleted flag. Every expense belongs to exactly one
+  period, normally the space's current open period.
 - `shared_expense_splits` — expense, user, explicit monetary share in cents. Only
   explicit amounts are persisted; 50/50 and percentage splits are UI conveniences that
   resolve to amounts. Sum of splits equals the total.
-- `settlements` — space, from user, to user, amount, date, note, timestamps.
+- `shared_period_reports` — permanent closing reports. A generated report is a snapshot:
+  the period's expenses (description, date, total, payer, each participant's share), each
+  member's total paid, and the net who-owes-whom settlement. Reports are stored
+  permanently and are immutable once accepted.
+
+Settlements are the net obligations recorded by an accepted closing report; there are no
+standalone settlement rows and no ad-hoc mid-period settlement.
 
 Enforced invariants: totals positive; splits non-negative and summing to the total; payer
-and split users are space members; settlement users are space members; no self-settlement.
+and split users are space members; every member has a split for every period expense; an
+expense's period is the space's current open period; closed periods are never edited.
 Validated at data-application and database/business-logic level, never UI-only.
 
 ### 12.4 Personal transaction provenance
@@ -363,21 +389,30 @@ reference (`origin_type` / `origin_id`). Manually entered transactions use `manu
 transaction created from a shared expense references that expense's UUID. The
 transaction's own stable ID remains unchanged.
 
-A shared expense synchronizes to every member's device; each device maintains the linked
-personal transaction for that user's own share. When splits change, linked transactions
-update in place (never duplicated); when a shared expense is deleted, linked transactions
-follow the app's deletion/tombstone model — no orphaned transactions.
+Each member's client derives its own linked personal transaction locally from the shared
+expense and that member's split in the shared table; this personal amount is never synced
+as a separate authoritative record. When splits change, linked transactions update in
+place (never duplicated); when a shared expense is deleted, linked transactions follow the
+app's deletion/tombstone model — no orphaned transactions.
 
-### 12.5 Balances and settlements
+### 12.5 Period closing and balances
 
-The net "who owes whom" balance is never stored as mutable state. It is derived from
-shared expenses, their splits, and settlements, with a clear sign convention, and reduced
-to a single net amount between each pair of members. Coconut shows only the resulting net
-settlement.
+The current balance is derived only from the open period's expenses and splits (closed
+periods are settled and frozen), with a clear sign convention and reduced to a single net
+"who owes whom" amount between each pair of members.
 
-Settling creates a `settlements` record; it does not modify or delete historical shared
-expenses. After settlement the outstanding balance is zero while expense and settlement
-history remain visible.
+Closing: a member clicks **Close Period**. Coconut generates a Shared Period Closing
+Report automatically:
+
+- Every expense in the period: description, date, who paid, the amount, and each
+  participant's share.
+- Each member's total amount paid.
+- The net "who owes whom how much" settlement.
+
+The member accepts or cancels the report. Accepted: the period is closed, its expenses
+become immutable, the report is stored permanently, and the next period opens. Cancelled:
+the report is discarded and the period stays open. Old reports remain accessible and
+read-only.
 
 ### 12.6 Shared Space lifecycle
 
@@ -385,24 +420,27 @@ history remain visible.
 - Invite/join: additional users join only through an explicit, secure invitation
   (invitation token/deep link or pending membership). Knowing a space UUID alone grants
   nothing.
-- Leave/remove: a member can be removed or leave without deleting historical shared
-  expenses.
+- Leave/remove: a member can be removed or leave without deleting historical expenses or
+  reports.
 
 ### 12.7 Sync integration
 
-Shared data (spaces, members, expenses, splits, settlements) uses the same local-first
+Shared data (spaces, members, periods, expenses, splits, reports) uses the same local-first
 sync engine as personal data: stable UUIDs, timestamps, outbox/tombstone logs, and the
 existing last-write-wins conflict strategy. Multiple members' devices pull the same shared
 rows. Splits are validated after synchronization so total != sum of splits is never
-silently introduced.
+silently introduced; a report may only be accepted once all synchronized data is
+consistent.
 
 ### 12.8 UI
 
-A dedicated Shared area shows spaces, members, the outstanding net balance, settlements,
-and the shared-expense list. Adding an expense is fast: description, amount, date, paid by
-(me / another member), split method, optional note, and the payer's and each
-participant's displayed share. Personal transaction views visibly identify shared-linked
-transactions and can navigate to the originating shared expense.
+A dedicated **Shared** tab on the bottom bar shows the space, its members, the open period
+header (start date — now), and only the current period's expenses, listed like
+transactions. A prominent **Close Period** button at the bottom opens the closing report
+with accept/cancel. Past closing reports are accessible and read-only. Adding an expense
+is fast: description, amount, date, paid by (me / another member), split method, optional
+note. Personal transaction views visibly identify shared-linked transactions and navigate
+to the originating shared expense.
 
 No separate category system: a shared expense may carry an optional category/merchant
 association, and the resulting personal transaction uses each participant's own budget
@@ -412,7 +450,8 @@ category.
 
 No real-time collaborative editing, no new backend, no second database, no separate
 Supabase projects, no dedicated global state for this feature, no bank integration, no
-general Splitwise replacement. Use the existing Coconut architecture throughout.
+general Splitwise replacement, and no ad-hoc mid-period settlements — money is settled only
+when a period closes. Use the existing Coconut architecture throughout.
 
 ---
 

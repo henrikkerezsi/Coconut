@@ -8,6 +8,7 @@ export function getDatabase(): Promise<SQLiteDatabase> {
   if (!dbPromise) {
     dbPromise = openDatabaseAsync(DATABASE_NAME).then(async (db) => {
       await db.execAsync('PRAGMA journal_mode = WAL;');
+      await db.execAsync('PRAGMA recursive_triggers = OFF;');
       await migrate(db);
       return db;
     });

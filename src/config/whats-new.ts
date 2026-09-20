@@ -7,7 +7,29 @@ export interface WhatsNewEntry {
 
 export const whatsNew: WhatsNewEntry[] = [
   {
-    version: '0.3.1',
+    version: '1.0.0',
+    releasedAt: '2026-09-20T00:00:00.000Z',
+    intro:
+      'Coconut hits 1.0 with the biggest change since launch: optional, family-sized budgets. ' +
+      'Sync your data to your own Supabase project so it survives across devices \u2014 or team up ' +
+      'with other people in a shared space to track common expenses together. Everything stays ' +
+      'local and private by default; your own backend is always opt-in.',
+    features: [
+      'Optional Supabase syncing \u2014 point Coconut at your own Supabase project to back up your ' +
+        'data and keep it in sync across Android and the desktop web build. Straight out of the box ' +
+        'there is no network: off stays fully offline.',
+      'A sync engine that reconciles changes made on any device: edits, new rows and deletions ' +
+        'flow in both directions automatically as soon as you are online.',
+      'Shared spaces \u2014 two or more people with accounts can track common expenses together, with ' +
+        'member roles, email invites and period closing',
+      'Linked personal transactions \u2014 your share of a shared expense shows up automatically in ' +
+        'your own budget, and stays in sync when the shared amount changes',
+      'Closing a shared period produces a report of balances and settled amounts for the whole group',
+      'Various bug fixes and stability improvements across the board',
+    ],
+  },
+  {
+    version: '0.4.0',
     releasedAt: '2026-09-17T00:00:00.000Z',
     intro:
       'The final update in the 0.3 series. Coconut now writes a month-end summary report for every ' +

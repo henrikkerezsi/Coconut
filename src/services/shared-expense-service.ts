@@ -2,6 +2,7 @@ import type {
   SharedBalance,
   SharedPeriodReportData,
   SharedReportExpense,
+  SharedReportMemberInfo,
   SharedSettlement,
   SharedSplitInput,
   SharedSplitMethod,
@@ -29,6 +30,7 @@ export interface BuildReportInput {
   periodEnd: string;
   closedAt: string;
   memberIds: number[];
+  members: SharedReportMemberInfo[];
   expenses: ReportExpenseInput[];
 }
 
@@ -260,6 +262,7 @@ export function buildPeriodReport(input: BuildReportInput): SharedPeriodReportDa
     periodStart: input.periodStart,
     periodEnd: input.periodEnd,
     closedAt: input.closedAt,
+    members: input.members,
     expenses,
     memberTotals: balances.map((balance) => ({
       memberId: balance.memberId,

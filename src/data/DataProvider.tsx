@@ -77,7 +77,7 @@ import {
   upsertMerchantSuggestion,
 } from '../database/reserve';
 import { getMonthData } from '../database/queries';
-import { syncNow } from '../sync/engine';
+import { syncSharedChanges } from '../sync/engine';
 import { projectReserve, type ReserveProjection } from '../services/reserve-service';
 import {
   budgetStatus,
@@ -276,7 +276,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setBudgets(await getAllBudgets(db));
     setAllSubscriptions(await getAllYearlySubscriptions(db));
     setAllMonths(await getAllMonths(db));
-    void syncNow().catch(() => undefined);
+    // Keep shared groups in step with other members cheaply: push local shared
+    // changes and pull anything new, without the heavy whole-database resync
+    // (that stays available in Settings for emergencies).
+    void syncSharedChanges().catch(() => undefined);
   }, []);
 
   useEffect(() => {

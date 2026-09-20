@@ -7,6 +7,34 @@ export interface WhatsNewEntry {
 
 export const whatsNew: WhatsNewEntry[] = [
   {
+    version: '1.0.1',
+    releasedAt: '2026-09-20T00:00:00.000Z',
+    intro:
+      'The first update since 1.0 is all about making shared spaces feel right. Shared data now ' +
+      'stays current in the background and refreshes the moment you ask for it, and it\u2019s finally ' +
+      'easy to step away from a group you\u2019re no longer part of. Along the way we cleared up a few ' +
+      'confusing names and fixed a batch of annoyances in shared groups.',
+    features: [
+      'A manual refresh for shared spaces \u2014 pull down on the shared screen and Coconut reaches ' +
+        'out to the group and brings in the very latest expenses',
+      'Shared spaces now sync automatically when you open the app, so the latest changes from ' +
+        'everyone else are already there before you start',
+      '"Category" is now simply "budget" on the transactions screen, matching what these things ' +
+        'actually are',
+      'Income is now "one-off income" \u2014 a name that says exactly what it is: a one-time addition ' +
+        'to what you have available this month',
+      'You can leave a shared space whenever you want, with one tap in the group menu \u2014 the group ' +
+        'is handed over to the remaining members',
+      'Shared expenses can be deleted straight from their edit screen',
+      'The shared screen now only lists groups you\u2019re actually a member of \u2014 no more ghosts of ' +
+        'spaces you were removed from',
+      'The "who paid" selector on a shared expense now reliably highlights the person you picked',
+      'Every member\u2019s expenses appear in a shared group now, not only the ones you added yourself',
+      'Personal transactions now mirror shared expenses correctly \u2014 when a shared amount changes, ' +
+        'your own budget always keeps up',
+    ],
+  },
+  {
     version: '1.0.0',
     releasedAt: '2026-09-20T00:00:00.000Z',
     intro:

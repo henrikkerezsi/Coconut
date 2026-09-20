@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Button, Card, List, Portal, Text } from 'react-native-paper';
 import type { Transaction } from '../../models';
 import { getTransaction } from '../../database/transactions';
@@ -21,28 +21,38 @@ export default function EditTransactionScreen() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [trace, setTrace] = useState<SharedExpenseTrace | null>(null);
 
-  useEffect(() => {
-    getTransaction(Number(id)).then((result) => {
-      if (result) {
-        setTransaction(result);
-      }
-    });
-  }, [id]);
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      getTransaction(Number(id)).then((result) => {
+        if (active && result) {
+          setTransaction(result);
+        }
+      });
+      return () => {
+        active = false;
+      };
+    }, [id])
+  );
 
-  useEffect(() => {
-    if (!transaction || transaction.originType !== 'shared' || !transaction.originId) {
-      return;
-    }
-    let active = true;
-    getExpenseTraceByOriginId(transaction.originId).then((result) => {
-      if (active) {
-        setTrace(result);
+  useFocusEffect(
+    useCallback(() => {
+      if (!transaction || transaction.originType !== 'shared' || !transaction.originId) {
+        return;
       }
-    });
-    return () => {
-      active = false;
-    };
-  }, [transaction]);
+      let active = true;
+      // Reload on every focus so a just-synced edit of the shared expense is
+      // reflected here (paid by, total) instead of the stale first load.
+      getExpenseTraceByOriginId(transaction.originId).then((result) => {
+        if (active) {
+          setTrace(result);
+        }
+      });
+      return () => {
+        active = false;
+      };
+    }, [transaction])
+  );
 
   if (!transaction) {
     return <LoadingScreen />;

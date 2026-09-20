@@ -8,6 +8,7 @@ import {
   Chip,
   Divider,
   HelperText,
+  Portal,
   SegmentedButtons,
   Text as PaperText,
   TextInput as PaperTextInput,
@@ -15,6 +16,7 @@ import {
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import dayjs from 'dayjs';
 import type { User } from '@supabase/supabase-js';
+import { AppDialog } from '../../components/app-dialog';
 import { ScreenToast } from '../../components/screen-toast';
 import type {
   SharedExpenseWithSplits,
@@ -33,6 +35,7 @@ import { getActiveMembers } from '../../database/sharedSpaces';
 import { getOpenPeriod, getPeriod } from '../../database/sharedPeriods';
 import {
   createSharedExpense,
+  deleteSharedExpense,
   getExpenseWithSplits,
   updateSharedExpense,
 } from '../../database/sharedExpenses';
@@ -78,6 +81,7 @@ export default function SharedExpenseScreen() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const load = useCallback(async () => {
     const user = await getSupabaseSessionUser();
@@ -202,6 +206,25 @@ export default function SharedExpenseScreen() {
       router.back();
     } catch {
       setToast('Could not save the expense');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDelete(): Promise<void> {
+    if (!sessionUser || !expense) {
+      return;
+    }
+    const id = expense.expense.id;
+    setConfirmDelete(false);
+    setBusy(true);
+    try {
+      await deleteSharedExpense(id);
+      await reconcileSharedTransactions(sessionUser.id);
+      await refresh();
+      router.back();
+    } catch {
+      setToast('Could not delete the expense');
     } finally {
       setBusy(false);
     }
@@ -343,6 +366,42 @@ export default function SharedExpenseScreen() {
         {editable ? 'Save expense' : 'Period closed'}
       </Button>
 
+      {expense ? (
+        <Button
+          mode="text"
+          icon="delete-outline"
+          textColor={theme.semantic.delete}
+          onPress={() => setConfirmDelete(true)}
+          disabled={!editable}
+          style={styles.deleteButton}
+        >
+          Delete expense
+        </Button>
+      ) : null}
+
+      <Portal>
+        <AppDialog visible={confirmDelete} onDismiss={() => setConfirmDelete(false)}>
+          <AppDialog.Title>Delete this expense?</AppDialog.Title>
+          <AppDialog.Content>
+            <PaperText variant="bodyMedium">
+              It will be removed from this space for everyone, and the linked transaction will be
+              removed from the personal expenses of every member.
+            </PaperText>
+          </AppDialog.Content>
+          <AppDialog.Actions>
+            <Button onPress={() => setConfirmDelete(false)}>Cancel</Button>
+            <Button
+              mode="contained"
+              buttonColor={theme.semantic.delete}
+              loading={busy}
+              onPress={() => void handleDelete()}
+            >
+              Delete
+            </Button>
+          </AppDialog.Actions>
+        </AppDialog>
+      </Portal>
+
       <ScreenToast visible={toast !== null} message={toast} onDismiss={() => setToast(null)} />
     </ScrollView>
   );
@@ -395,5 +454,8 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 8,
+  },
+  deleteButton: {
+    marginTop: 4,
   },
 });

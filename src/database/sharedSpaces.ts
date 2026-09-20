@@ -2,6 +2,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import type { SharedMemberRole, SharedMemberStatus, SharedSpace, SharedSpaceMember } from '../models';
 import { getDatabase } from './database';
 import { decoupleSharedTransactions } from './sharedLinking';
+import { withPullGuard } from './syncMeta';
 
 interface SharedSpaceRow {
   id: number;
@@ -139,6 +140,56 @@ export async function removeSpaceMember(
   ]);
 }
 
+export async function leaveSharedSpace(
+  memberId: number,
+  userId: string,
+  db?: SQLiteDatabase
+): Promise<boolean> {
+  const database = db ?? (await getDatabase());
+  const member = await database.getFirstAsync<SharedMemberRow>(
+    'SELECT * FROM shared_space_members WHERE id = ? AND user_id = ? LIMIT 1',
+    [memberId, userId]
+  );
+  if (!member || member.role === 'owner') {
+    return false;
+  }
+  const spaceId = member.space_id;
+  const expenseUuids = (
+    await database.getAllAsync<{ uuid: string | null }>(
+      'SELECT uuid FROM shared_expenses WHERE space_id = ? AND uuid IS NOT NULL',
+      [spaceId]
+    )
+  ).map((row) => row.uuid as string);
+  await database.withTransactionAsync(async () => {
+    await decoupleSharedTransactions(expenseUuids, database);
+    // Marking the membership as left outside the pull guard logs an outbox entry
+    // so this device can still push the change to the remote (RLS allows the
+    // member to update their own row) before it loses access to the space.
+    await database.runAsync("UPDATE shared_space_members SET status = 'left' WHERE id = ?", [
+      memberId,
+    ]);
+  });
+  // Drop the local copy of the space under the pull guard so the change-capture
+  // triggers do not write tombstones that would delete the group's remote data.
+  // The leaving member's own row and the space row are kept so the pending
+  // status='left' push can still resolve the space_uuid; the next pull culls them.
+  await withPullGuard(database, async () => {
+    await database.runAsync(
+      `DELETE FROM shared_expense_splits
+        WHERE expense_id IN (SELECT id FROM shared_expenses WHERE space_id = ?)`,
+      [spaceId]
+    );
+    await database.runAsync('DELETE FROM shared_expenses WHERE space_id = ?', [spaceId]);
+    await database.runAsync('DELETE FROM shared_period_reports WHERE space_id = ?', [spaceId]);
+    await database.runAsync('DELETE FROM shared_periods WHERE space_id = ?', [spaceId]);
+    await database.runAsync(
+      'DELETE FROM shared_space_members WHERE space_id = ? AND id != ?',
+      [spaceId, memberId]
+    );
+  });
+  return true;
+}
+
 export async function deleteSharedSpace(id: number, db?: SQLiteDatabase): Promise<void> {
   const database = db ?? (await getDatabase());
   await database.withTransactionAsync(async () => {
@@ -202,6 +253,20 @@ export async function getSpaceMembers(
   const rows = await database.getAllAsync<SharedMemberRow>(
     `SELECT * FROM shared_space_members
       WHERE space_id = ? AND status != 'left'
+      ORDER BY CASE role WHEN 'owner' THEN 0 ELSE 1 END, joined_at ASC, id ASC`,
+    [spaceId]
+  );
+  return rows.map(rowToMember);
+}
+
+export async function getSpaceMembersIncludingLeft(
+  spaceId: number,
+  db?: SQLiteDatabase
+): Promise<SharedSpaceMember[]> {
+  const database = db ?? (await getDatabase());
+  const rows = await database.getAllAsync<SharedMemberRow>(
+    `SELECT * FROM shared_space_members
+      WHERE space_id = ?
       ORDER BY CASE role WHEN 'owner' THEN 0 ELSE 1 END, joined_at ASC, id ASC`,
     [spaceId]
   );

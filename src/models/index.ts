@@ -223,6 +223,13 @@ export interface SharedSettlement {
   amountCents: number;
 }
 
+export interface SharedReportMemberInfo {
+  memberId: number;
+  uuid: string | null;
+  displayName: string | null;
+  email: string | null;
+}
+
 export interface SharedReportExpense {
   description: string;
   date: string;
@@ -241,6 +248,7 @@ export interface SharedPeriodReportData {
   periodStart: string;
   periodEnd: string;
   closedAt: string;
+  members: SharedReportMemberInfo[];
   expenses: SharedReportExpense[];
   memberTotals: SharedReportMemberTotal[];
   balances: SharedBalance[];

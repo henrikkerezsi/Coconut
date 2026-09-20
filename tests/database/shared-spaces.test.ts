@@ -8,6 +8,8 @@ import {
   getMemberForUser,
   getMySharedSpaces,
   getSpaceMembers,
+  getSpaceMembersIncludingLeft,
+  leaveSharedSpace,
   removeSpaceMember,
   renameSharedSpace,
   setMemberDisplayNameForUser,
@@ -175,6 +177,164 @@ describe('removeSpaceMember', () => {
       status: string;
     };
     expect(member.status).toBe('active');
+  });
+});
+
+describe('leaveSharedSpace', () => {
+  it('marks the leaving member as left, hides the space, and keeps only the local anchors', async () => {
+    const raw = freshDb();
+    const api = makeDbApi(raw) as never;
+    const spaceId = await createSharedSpace(
+      { name: 'Flat', ownerUserId: 'user-1', ownerEmail: 'one@example.com', ownerDisplayName: 'alice' },
+      api
+    );
+    raw.exec(`INSERT INTO shared_space_members (space_id, user_id, email, role, status, joined_at)
+              VALUES (${spaceId}, 'user-2', 'two@example.com', 'member', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`);
+    const memberId = (
+      raw.prepare('SELECT id FROM shared_space_members WHERE user_id = ?').get('user-2') as { id: number }
+    ).id;
+
+    const left = await leaveSharedSpace(memberId, 'user-2', api);
+
+    expect(left).toBe(true);
+    const member = raw.prepare('SELECT status FROM shared_space_members WHERE id = ?').get(memberId) as {
+      status: string;
+    };
+    expect(member.status).toBe('left');
+    expect(await getMySharedSpaces('user-2', api)).toEqual([]);
+    expect((raw.prepare('SELECT COUNT(*) AS n FROM shared_spaces').get() as { n: number }).n).toBe(1);
+    expect((raw.prepare('SELECT COUNT(*) AS n FROM shared_space_members').get() as { n: number }).n).toBe(1);
+  });
+
+  it('refuses to let the owner leave', async () => {
+    const raw = freshDb();
+    const api = makeDbApi(raw) as never;
+    const spaceId = await createSharedSpace(
+      { name: 'Flat', ownerUserId: 'user-1', ownerEmail: 'one@example.com', ownerDisplayName: 'alice' },
+      api
+    );
+    const ownerId = (
+      raw.prepare('SELECT id FROM shared_space_members WHERE user_id = ?').get('user-1') as { id: number }
+    ).id;
+
+    const left = await leaveSharedSpace(ownerId, 'user-1', api);
+
+    expect(left).toBe(false);
+    const owner = raw.prepare('SELECT status FROM shared_space_members WHERE id = ?').get(ownerId) as {
+      status: string;
+    };
+    expect(owner.status).toBe('active');
+    expect((raw.prepare('SELECT COUNT(*) AS n FROM shared_space_members').get() as { n: number }).n).toBe(1);
+  });
+
+  it('refuses to let a user leave a membership that is not theirs', async () => {
+    const raw = freshDb();
+    const api = makeDbApi(raw) as never;
+    const spaceId = await createSharedSpace(
+      { name: 'Flat', ownerUserId: 'user-1', ownerEmail: 'one@example.com', ownerDisplayName: 'alice' },
+      api
+    );
+    raw.exec(`INSERT INTO shared_space_members (space_id, user_id, email, role, status, joined_at)
+              VALUES (${spaceId}, 'user-2', 'two@example.com', 'member', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`);
+    const memberId = (
+      raw.prepare('SELECT id FROM shared_space_members WHERE user_id = ?').get('user-2') as { id: number }
+    ).id;
+
+    const left = await leaveSharedSpace(memberId, 'user-3', api);
+
+    expect(left).toBe(false);
+    const member = raw.prepare('SELECT status FROM shared_space_members WHERE id = ?').get(memberId) as {
+      status: string;
+    };
+    expect(member.status).toBe('active');
+  });
+
+  it('keeps linked transactions as ordinary ones and deletes the local children silently', async () => {
+    const raw = freshDb();
+    const api = makeDbApi(raw) as never;
+    const spaceId = await createSharedSpace(
+      { name: 'Flat', ownerUserId: 'user-1', ownerEmail: 'one@example.com', ownerDisplayName: 'alice' },
+      api
+    );
+    const memberOne = (
+      raw.prepare('SELECT id FROM shared_space_members ORDER BY id LIMIT 1').get() as { id: number }
+    ).id;
+    raw.exec(`INSERT INTO shared_space_members (space_id, user_id, email, role, status, joined_at)
+              VALUES (${spaceId}, 'user-2', 'two@example.com', 'member', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`);
+    const memberTwo = (
+      raw.prepare('SELECT id FROM shared_space_members ORDER BY id DESC LIMIT 1').get() as { id: number }
+    ).id;
+    raw.exec(`INSERT INTO shared_periods (space_id, start_date, status)
+              VALUES (${spaceId}, '2026-09-01', 'open')`);
+    const periodId = (
+      raw.prepare('SELECT id FROM shared_periods ORDER BY id DESC LIMIT 1').get() as { id: number }
+    ).id;
+    raw.exec(
+      `INSERT INTO shared_expenses (space_id, period_id, description, total_amount_cents, date, paid_by_member_id, created_by_user_id)
+       VALUES (${spaceId}, ${periodId}, 'Dinner', 10000, '2026-09-10', ${memberOne}, 'user-1')`
+    );
+    const expenseId = (
+      raw.prepare('SELECT id FROM shared_expenses ORDER BY id DESC LIMIT 1').get() as { id: number }
+    ).id;
+    raw.exec(
+      `INSERT INTO shared_expense_splits (expense_id, member_id, amount_cents)
+       VALUES (${expenseId}, ${memberOne}, 4000), (${expenseId}, ${memberTwo}, 6000)`
+    );
+    await reconcileSharedTransactions('user-1', api);
+    const linkedBefore = raw.prepare('SELECT origin_type FROM transactions').all() as Array<{
+      origin_type: string;
+    }>;
+    expect(linkedBefore).toHaveLength(1);
+    expect(linkedBefore[0].origin_type).toBe('shared');
+
+    const left = await leaveSharedSpace(memberTwo, 'user-2', api);
+
+    expect(left).toBe(true);
+    expect((raw.prepare('SELECT COUNT(*) AS n FROM shared_spaces').get() as { n: number }).n).toBe(1);
+    expect((raw.prepare('SELECT COUNT(*) AS n FROM shared_space_members').get() as { n: number }).n).toBe(1);
+    expect((raw.prepare('SELECT COUNT(*) AS n FROM shared_expenses').get() as { n: number }).n).toBe(0);
+    expect((raw.prepare('SELECT COUNT(*) AS n FROM shared_expense_splits').get() as { n: number }).n).toBe(0);
+    expect((raw.prepare('SELECT COUNT(*) AS n FROM shared_periods').get() as { n: number }).n).toBe(0);
+    expect((raw.prepare('SELECT COUNT(*) AS n FROM shared_period_reports').get() as { n: number }).n).toBe(0);
+
+    const kept = raw
+      .prepare('SELECT amount_cents, merchant, origin_type, origin_id FROM transactions')
+      .all() as Array<{
+      amount_cents: number;
+      merchant: string;
+      origin_type: string | null;
+      origin_id: string | null;
+    }>;
+    expect(kept).toHaveLength(1);
+    expect(kept[0].amount_cents).toBe(4000);
+    expect(kept[0].merchant).toBe('Dinner');
+    expect(kept[0].origin_type).toBeNull();
+    expect(kept[0].origin_id).toBeNull();
+
+    const tombstones = raw
+      .prepare('SELECT table_name FROM shared_sync_tombstones')
+      .all() as Array<{ table_name: string }>;
+    expect(tombstones).toEqual([]);
+  });
+});
+
+describe('getSpaceMembersIncludingLeft', () => {
+  it('returns members who have left the space alongside active ones', async () => {
+    const raw = freshDb();
+    const api = makeDbApi(raw) as never;
+    const spaceId = await createSharedSpace(
+      { name: 'Flat', ownerUserId: 'user-1', ownerEmail: 'one@example.com', ownerDisplayName: 'alice' },
+      api
+    );
+    raw.exec(`INSERT INTO shared_space_members (space_id, user_id, email, role, status, joined_at)
+              VALUES (${spaceId}, 'user-2', 'two@example.com', 'member', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`);
+    const memberId = (raw.prepare('SELECT id FROM shared_space_members WHERE user_id = ?').get('user-2') as { id: number }).id;
+
+    await removeSpaceMember(memberId, api);
+
+    const members = await getSpaceMembersIncludingLeft(spaceId, api);
+    expect(members.find((m) => m.id === memberId)?.status).toBe('left');
+    expect(members.find((m) => m.userId === 'user-1')?.status).toBe('active');
   });
 });
 

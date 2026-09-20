@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { SectionList, StyleSheet, View } from 'react-native';
+import { RefreshControl, SectionList, StyleSheet, View } from 'react-native';
 import { Tabs, useFocusEffect, useRouter } from 'expo-router';
 import {
   Button,
@@ -26,7 +26,7 @@ import { useAppTheme } from '../../theme';
 import { formatCents } from '../../utils/currency';
 import { DAYJS_STORE_DATE_FORMAT, relativeDayLabel } from '../../utils/date';
 import { sharedMemberName } from '../../utils/shared-members';
-import { getSupabaseSessionUser } from '../../sync/supabase';
+import { getClient, getSupabaseSessionUser } from '../../sync/supabase';
 import { ScreenToast } from '../../components/screen-toast';
 import { getSelectedSpaceUuid, setSelectedSpaceUuid } from '../../database/localPreferences';
 import {
@@ -38,17 +38,21 @@ import {
   getPendingInvitesForEmail,
   getSharedSpace,
   getSpaceMembers,
+  getSpaceMembersIncludingLeft,
+  leaveSharedSpace,
   removeSpaceMember,
   renameSharedSpace,
 } from '../../database/sharedSpaces';
+import { getDatabase } from '../../database/database';
 import { closePeriod, ensureOpenPeriod, getOpenPeriod } from '../../database/sharedPeriods';
 import {
-  deleteSharedExpense,
   getPeriodsWithReports,
   listPeriodExpenses,
   savePeriodReport,
 } from '../../database/sharedExpenses';
 import { reconcileSharedTransactions } from '../../database/sharedLinking';
+import { pullSharedChanges } from '../../sync/shared';
+import { syncSharedChanges } from '../../sync/engine';
 import { buildPeriodReport } from '../../services/shared-expense-service';
 import { SharedHeaderMenu } from '../../components/shared-header-menu';
 import { AppDialog } from '../../components/app-dialog';
@@ -86,8 +90,10 @@ export default function SharedScreen() {
   const [renameName, setRenameName] = useState('');
   const [removeTarget, setRemoveTarget] = useState<SharedSpaceMember | null>(null);
   const [deleteSpaceOpen, setDeleteSpaceOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  
   const [busy, setBusy] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const selectedRef = useRef<number | null>(null);
@@ -135,10 +141,18 @@ export default function SharedScreen() {
     }, [reload])
   );
 
-  const activeMembers = useMemo(
-    () => members.filter((member) => member.status === 'active'),
-    [members]
-  );
+  const handlePullRefresh = useCallback(async (): Promise<void> => {
+    setSyncing(true);
+    try {
+      await syncSharedChanges();
+    } catch {
+      setToast('Could not sync with the shared space');
+    } finally {
+      setSyncing(false);
+      await reload();
+    }
+  }, [reload]);
+
   const memberNames = useMemo(
     () => new Map(members.map((member) => [member.id, sharedMemberName(member)])),
     [members]
@@ -253,24 +267,6 @@ export default function SharedScreen() {
     }
   }
 
-  async function handleDeleteExpense(): Promise<void> {
-    if (!sessionUser || deleteTarget === null) {
-      return;
-    }
-    const id = deleteTarget;
-    setDeleteTarget(null);
-    try {
-      await deleteSharedExpense(id);
-      await reconcileSharedTransactions(sessionUser.id);
-      if (selectedId !== null) {
-        await loadSpace(selectedId);
-      }
-      await refresh();
-    } catch {
-      setToast('Could not delete the expense');
-    }
-  }
-
   function openRenameSpace(): void {
     if (!selectedSpace) {
       return;
@@ -314,6 +310,29 @@ export default function SharedScreen() {
     }
   }
 
+  async function handleLeaveSpace(): Promise<void> {
+    if (selectedId === null || myMemberId === null || !sessionUser) {
+      return;
+    }
+    const memberId = myMemberId;
+    setLeaveOpen(false);
+    setBusy(true);
+    try {
+      const left = await leaveSharedSpace(memberId, sessionUser.id);
+      if (!left) {
+        setToast('The owner cannot leave a shared space');
+        return;
+      }
+      selectedRef.current = null;
+      await reload();
+      await refresh();
+    } catch {
+      setToast('Could not leave the shared space');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleDeleteSpace(): Promise<void> {
     if (selectedId === null) {
       return;
@@ -339,15 +358,49 @@ export default function SharedScreen() {
     }
     setBusy(true);
     try {
+      // Force a shared-data pull before generating the report so a stale local
+      // copy cannot silently omit expenses added by other members. The report
+      // is only ever built from the cloud-authoritative shared rows.
+      const db = await getDatabase();
+      const client = await getClient();
+      await pullSharedChanges(client, db);
+
+      const latestSpace = await getSharedSpace(selectedSpace.id);
+      const latestMembers = await getSpaceMembersIncludingLeft(selectedSpace.id);
+      const latest = await getOpenPeriod(selectedSpace.id);
+      if (!latest) {
+        setToast('This space has no open period after syncing');
+        setCloseOpen(false);
+        await loadSpace(selectedSpace.id);
+        return;
+      }
+      if (latest.id !== period.id) {
+        setToast('The open period changed on another device — reloading');
+        setCloseOpen(false);
+        await loadSpace(selectedSpace.id);
+        return;
+      }
+      const latestExpenses = await listPeriodExpenses(latest.id);
+
       const closedAt = dayjs().toISOString();
       const periodEnd = dayjs().format(DAYJS_STORE_DATE_FORMAT);
+      const activeMemberIds = latestMembers
+        .filter((member) => member.status === 'active')
+        .map((member) => member.id);
+      const reportMembers = latestMembers.map((member) => ({
+        memberId: member.id,
+        uuid: member.uuid,
+        displayName: member.displayName,
+        email: member.email,
+      }));
       const report = buildPeriodReport({
-        spaceName: selectedSpace.name,
-        periodStart: period.startDate,
+        spaceName: latestSpace?.name ?? selectedSpace.name,
+        periodStart: latest.startDate,
         periodEnd,
         closedAt,
-        memberIds: activeMembers.map((member) => member.id),
-        expenses: expenses.map(({ expense, splits }) => ({
+        memberIds: activeMemberIds,
+        members: reportMembers,
+        expenses: latestExpenses.map(({ expense, splits }) => ({
           description: expense.description,
           date: expense.date,
           paidByMemberId: expense.paidByMemberId,
@@ -358,19 +411,20 @@ export default function SharedScreen() {
           })),
         })),
       });
+      const closer = latestMembers.find((member) => member.userId === sessionUser.id) ?? null;
       await savePeriodReport({
         spaceId: selectedSpace.id,
-        periodId: period.id,
+        periodId: latest.id,
         report,
-        closedByMemberId: myMemberId,
+        closedByMemberId: closer?.id ?? null,
       });
-      await closePeriod(period.id, periodEnd);
+      await closePeriod(latest.id, periodEnd);
       await ensureOpenPeriod(selectedSpace.id);
       setCloseOpen(false);
       await loadSpace(selectedSpace.id);
       await refresh();
     } catch {
-      setToast('Could not close the period');
+      setToast('Could not close the period — a pre-close sync is required');
     } finally {
       setBusy(false);
     }
@@ -436,12 +490,14 @@ export default function SharedScreen() {
               canManage={currentMember?.role === 'owner'}
               canClosePeriod={period !== null && expenses.length > 0}
               busy={busy}
+              currentMemberId={myMemberId}
               onSelectSpace={(space) => void selectSpace(space)}
               onCreateSpace={() => setCreateOpen(true)}
               onInvite={() => setInviteOpen(true)}
               onAcceptInvite={(member) => void handleAccept(member)}
               onRenameSpace={openRenameSpace}
               onRemoveMember={(member) => setRemoveTarget(member)}
+              onLeaveSpace={() => setLeaveOpen(true)}
               onDeleteSpace={() => setDeleteSpaceOpen(true)}
               onOpenBalances={() => {
                 if (selectedSpace) {
@@ -485,6 +541,15 @@ export default function SharedScreen() {
             keyExtractor={({ expense }) => String(expense.id)}
             stickySectionHeadersEnabled={false}
             contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={syncing}
+                onRefresh={() => void handlePullRefresh()}
+                colors={[theme.colors.primary]}
+                tintColor={theme.colors.primary}
+                progressBackgroundColor={theme.colors.surface}
+              />
+            }
             ListEmptyComponent={
               <EmptyState
                 icon={<Text variant="displaySmall">🧾</Text>}
@@ -533,7 +598,6 @@ export default function SharedScreen() {
                           })
                       : undefined
                   }
-                  onLongPress={() => setDeleteTarget(expense.id)}
                 />
               );
             }}
@@ -683,6 +747,32 @@ export default function SharedScreen() {
         ) : null}
 
         <AppDialog
+          visible={leaveOpen}
+          onDismiss={() => setLeaveOpen(false)}
+          style={{ borderRadius: theme.radii.xl }}
+        >
+          <AppDialog.Title>Leave this space?</AppDialog.Title>
+          <AppDialog.Content>
+            <Text variant="bodyMedium">
+              You will lose access to this space on all your devices. Your linked personal
+              expenses are kept and become ordinary transactions. The other members can keep
+              managing the space without you.
+            </Text>
+          </AppDialog.Content>
+          <AppDialog.Actions>
+            <Button onPress={() => setLeaveOpen(false)}>Cancel</Button>
+            <Button
+              mode="contained"
+              buttonColor={theme.semantic.delete}
+              loading={busy}
+              onPress={() => void handleLeaveSpace()}
+            >
+              Leave
+            </Button>
+          </AppDialog.Actions>
+        </AppDialog>
+
+        <AppDialog
           visible={deleteSpaceOpen}
           onDismiss={() => setDeleteSpaceOpen(false)}
           style={{ borderRadius: theme.radii.small }}
@@ -708,22 +798,7 @@ export default function SharedScreen() {
           </AppDialog.Actions>
         </AppDialog>
 
-        <AppDialog visible={deleteTarget !== null} onDismiss={() => setDeleteTarget(null)}>
-          <AppDialog.Title>Delete this expense?</AppDialog.Title>
-          <AppDialog.Content>
-            <Text variant="bodyMedium">
-              It will be removed from this space for everyone and your linked transaction will be
-              removed.
-            </Text>
-          </AppDialog.Content>
-          <AppDialog.Actions>
-            <Button onPress={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button mode="contained" onPress={() => void handleDeleteExpense()}>
-              Delete
-            </Button>
-          </AppDialog.Actions>
-        </AppDialog>
-      </Portal>
+        </Portal>
 
       <ScreenToast visible={toast !== null} message={toast} onDismiss={() => setToast(null)} />
     </ScreenFade>

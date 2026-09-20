@@ -12,7 +12,7 @@ import dayjs from 'dayjs';
 import type { SharedPeriodReport, SharedSpaceMember } from '../../../models';
 import { useAppData } from '../../../data/DataProvider';
 import { formatCents } from '../../../utils/currency';
-import { getSpaceMembers } from '../../../database/sharedSpaces';
+import { getSpaceMembersIncludingLeft } from '../../../database/sharedSpaces';
 import { getPeriodReport } from '../../../database/sharedExpenses';
 
 export default function SharedReportScreen() {
@@ -27,7 +27,7 @@ export default function SharedReportScreen() {
     const entry = await getPeriodReport(periodId);
     setReport(entry);
     if (entry) {
-      setMembers(await getSpaceMembers(entry.spaceId));
+      setMembers(await getSpaceMembersIncludingLeft(entry.spaceId));
     }
     setLoading(false);
   }, [periodId]);
@@ -54,14 +54,28 @@ export default function SharedReportScreen() {
     );
   }
 
-  const names = new Map(
-    members.map((member) => [
-      member.id,
-      member.displayName ?? member.email ?? `Member #${member.id}`,
-    ])
-  );
-  const nameOf = (id: number): string => names.get(id) ?? `Member #${id}`;
   const { report: data } = report;
+
+  const currentByUuid = new Map(
+    members.filter((member) => member.uuid !== null).map((member) => [member.uuid, member])
+  );
+  const snapshotById = new Map(
+    (data.members ?? []).map((member) => [member.memberId, member])
+  );
+  const nameOf = (id: number): string => {
+    const snapshot = snapshotById.get(id);
+    if (snapshot) {
+      const current = snapshot.uuid ? currentByUuid.get(snapshot.uuid) : undefined;
+      const name = current
+        ? current.displayName ?? current.email
+        : snapshot.displayName ?? snapshot.email;
+      if (name) {
+        return name;
+      }
+    }
+    const legacy = members.find((member) => member.id === id);
+    return legacy?.displayName ?? legacy?.email ?? `Member #${id}`;
+  };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>

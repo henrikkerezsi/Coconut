@@ -24,12 +24,14 @@ export interface SharedHeaderMenuProps {
   canManage: boolean;
   canClosePeriod: boolean;
   busy: boolean;
+  currentMemberId: number | null;
   onSelectSpace: (space: SharedSpace) => void;
   onCreateSpace: () => void;
   onInvite: () => void;
   onAcceptInvite: (member: SharedSpaceMember) => void;
   onRenameSpace: () => void;
   onRemoveMember: (member: SharedSpaceMember) => void;
+  onLeaveSpace: () => void;
   onDeleteSpace: () => void;
   onOpenBalances: () => void;
   onOpenReport: (periodId: number) => void;
@@ -54,10 +56,12 @@ export function SharedHeaderMenu({
   onAcceptInvite,
   onRenameSpace,
   onRemoveMember,
+  onLeaveSpace,
   onDeleteSpace,
   onOpenBalances,
   onOpenReport,
   onClosePeriod,
+  currentMemberId,
 }: SharedHeaderMenuProps) {
   const theme = useAppTheme();
   const [visible, setVisible] = useState(false);
@@ -187,34 +191,51 @@ export function SharedHeaderMenu({
           <PaperText variant="labelLarge" style={styles.sectionLabel}>
             Members
           </PaperText>
-          {members.map((member) => (
-            <List.Item
-              key={member.id}
-              title={sharedMemberName(member)}
-              description={sharedMemberRoleLabel(member)}
-              left={(props) => (
-                <List.Icon
-                  {...props}
-                  icon={member.role === 'owner' ? 'crown-outline' : 'account-outline'}
-                />
-              )}
-              right={
-                canManage && member.role !== 'owner'
-                  ? () => (
-                      <IconButton
-                        icon="account-remove-outline"
-                        disabled={busy}
-                        onPress={() => {
-                          closeMenu();
-                          onRemoveMember(member);
-                        }}
-                        accessibilityLabel={`Remove ${sharedMemberName(member)}`}
-                      />
-                    )
-                  : undefined
-              }
-            />
-          ))}
+          {members.map((member) => {
+            const isSelf = currentMemberId !== null && member.id === currentMemberId;
+            const right = isSelf
+              ? member.role !== 'owner'
+                ? () => (
+                    <IconButton
+                      icon="door-open"
+                      iconColor={theme.semantic.delete}
+                      disabled={busy}
+                      onPress={() => {
+                        closeMenu();
+                        onLeaveSpace();
+                      }}
+                      accessibilityLabel="Leave this shared space"
+                    />
+                  )
+                : undefined
+              : canManage && member.role !== 'owner'
+                ? () => (
+                    <IconButton
+                      icon="account-remove-outline"
+                      disabled={busy}
+                      onPress={() => {
+                        closeMenu();
+                        onRemoveMember(member);
+                      }}
+                      accessibilityLabel={`Remove ${sharedMemberName(member)}`}
+                    />
+                  )
+                : undefined;
+            return (
+              <List.Item
+                key={member.id}
+                title={sharedMemberName(member)}
+                description={sharedMemberRoleLabel(member)}
+                left={(props) => (
+                  <List.Icon
+                    {...props}
+                    icon={member.role === 'owner' ? 'crown-outline' : 'account-outline'}
+                  />
+                )}
+                right={right}
+              />
+            );
+          })}
           {reports.length > 0 ? (
             <>
               <Divider />

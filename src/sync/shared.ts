@@ -15,6 +15,7 @@ const SHARED_TABLE_SET = new Set(SHARED_ADAPTERS.map((adapter) => adapter.localT
 interface OutboxEntry {
   table_name: string;
   row_key: string;
+  tracked: boolean;
 }
 
 interface SharedTombstoneEntry {
@@ -200,19 +201,29 @@ async function backfillSharedRows(db: SQLiteDatabase): Promise<void> {
   }
 }
 
-async function listPushEntries(db: SQLiteDatabase): Promise<Map<string, OutboxEntry[]>> {
-  const outbox = await db.getAllAsync<OutboxEntry>(
+async function listPushEntries(
+  db: SQLiteDatabase,
+  changesOnly: boolean
+): Promise<Map<string, OutboxEntry[]>> {
+  const outbox = await db.getAllAsync<{ table_name: string; row_key: string }>(
     'SELECT table_name, row_key FROM sync_outbox ORDER BY id ASC'
   );
+  const outboxKeys = new Set(outbox.map((entry) => `${entry.table_name}|${entry.row_key}`));
   const seeded = new Map<string, OutboxEntry[]>();
-  for (const adapter of SHARED_ADAPTERS) {
-    const rows = await db.getAllAsync<{ key: string }>(
-      `SELECT uuid AS key FROM ${adapter.localTable} WHERE uuid IS NOT NULL`
-    );
-    seeded.set(
-      adapter.localTable,
-      rows.map((row) => ({ table_name: adapter.localTable, row_key: row.key }))
-    );
+  if (!changesOnly) {
+    for (const adapter of SHARED_ADAPTERS) {
+      const rows = await db.getAllAsync<{ key: string }>(
+        `SELECT uuid AS key FROM ${adapter.localTable} WHERE uuid IS NOT NULL`
+      );
+      seeded.set(
+        adapter.localTable,
+        rows.map((row) => ({
+          table_name: adapter.localTable,
+          row_key: row.key,
+          tracked: outboxKeys.has(`${adapter.localTable}|${row.key}`),
+        }))
+      );
+    }
   }
   for (const entry of outbox) {
     if (!SHARED_TABLE_SET.has(entry.table_name)) {
@@ -222,7 +233,7 @@ async function listPushEntries(db: SQLiteDatabase): Promise<Map<string, OutboxEn
     if (list.some((e) => e.row_key === entry.row_key)) {
       continue;
     }
-    list.push(entry);
+    list.push({ table_name: entry.table_name, row_key: entry.row_key, tracked: true });
     seeded.set(entry.table_name, list);
   }
   return seeded;
@@ -259,6 +270,32 @@ async function pushSharedRow(
       entry.row_key,
     ]);
     return;
+  }
+  if (!data) {
+    // A row that no longer exists on the remote must never be re-inserted from a
+    // stale local copy: that resurrects rows another device deleted (e.g. the
+    // splits an edit just replaced), so every member ends up with the old AND the
+    // new splits and the reconciler derives wrong linked amounts. Only genuinely
+    // new local writes (still tracked in the outbox) may be pushed, and a remote
+    // tombstone always wins over this device's copy.
+    const tomb = await client
+      .from('shared_sync_tombstones')
+      .select('row_key')
+      .eq('table_name', adapter.localTable)
+      .eq('row_key', entry.row_key)
+      .maybeSingle();
+    if (tomb.error) {
+      throw new Error(
+        `Shared tombstone lookup failed for ${adapter.localTable}: ${tomb.error.message}`
+      );
+    }
+    await db.runAsync('DELETE FROM sync_outbox WHERE table_name = ? AND row_key = ?', [
+      entry.table_name,
+      entry.row_key,
+    ]);
+    if (tomb.data || !entry.tracked) {
+      return;
+    }
   }
   const payload: Record<string, unknown> = {
     uuid: localRow.uuid ?? null,
@@ -354,6 +391,11 @@ async function pushSharedTombstones(
   return ordered.length;
 }
 
+export interface SharedPushOptions {
+  /** Push only rows logged in the outbox, skipping the whole-database re-seed. */
+  changesOnly?: boolean;
+}
+
 export interface SharedPushResult {
   pushed: number;
   tombstones: number;
@@ -362,12 +404,13 @@ export interface SharedPushResult {
 export async function pushSharedChanges(
   client: SupabaseClient,
   db: SQLiteDatabase,
-  userId: string
+  userId: string,
+  options: SharedPushOptions = {}
 ): Promise<SharedPushResult> {
   await backfillSharedRows(db);
   await consolidateOpenPeriods(db);
   const maps = await loadPushFkMaps(db);
-  const entriesByTable = await listPushEntries(db);
+  const entriesByTable = await listPushEntries(db, options.changesOnly === true);
   let pushed = 0;
   for (const adapter of SHARED_ADAPTERS) {
     for (const entry of entriesByTable.get(adapter.localTable) ?? []) {
@@ -424,22 +467,26 @@ async function applySharedRemoteRow(
 
 async function applySharedRemoteTombstones(
   db: SQLiteDatabase,
-  client: SupabaseClient
-): Promise<number> {
+  client: SupabaseClient,
+  since: string
+): Promise<{ tombstones: number; tombstonedKeys: Set<string> }> {
   const { data, error } = await client
     .from('shared_sync_tombstones')
     .select('table_name, row_key')
-    .gt('deleted_at', SHARED_EPOCH);
+    .gt('deleted_at', since);
   if (error) {
     throw new Error(`Shared tombstone pull failed: ${error.message}`);
   }
   const adapterByTable = new Map(SHARED_ADAPTERS.map((adapter) => [adapter.localTable, adapter]));
   let applied = 0;
+  const tombstonedKeys = new Set<string>();
   for (const tomb of data ?? []) {
     const adapter = adapterByTable.get(tomb.table_name as string);
     if (!adapter) {
       continue;
     }
+    const key = `${tomb.table_name}:${tomb.row_key}`;
+    tombstonedKeys.add(key);
     await db.runAsync(`DELETE FROM ${adapter.localTable} WHERE uuid = ?`, [tomb.row_key]);
     await db.runAsync('DELETE FROM sync_outbox WHERE table_name = ? AND row_key = ?', [
       tomb.table_name,
@@ -447,7 +494,7 @@ async function applySharedRemoteTombstones(
     ]);
     applied += 1;
   }
-  return applied;
+  return { tombstones: applied, tombstonedKeys };
 }
 
 async function expireRemovedSpaces(
@@ -499,24 +546,39 @@ export interface SharedPullResult {
 
 export async function pullSharedChanges(
   client: SupabaseClient,
-  db: SQLiteDatabase
+  db: SQLiteDatabase,
+  since?: string
 ): Promise<SharedPullResult> {
+  const sinceValue = since ?? SHARED_EPOCH;
   const maps = await loadPullFkMaps(db);
   let pulled = 0;
-  let tombstones = 0;
   let expired = 0;
+  let tombstones = 0;
   await withPullGuard(db, async () => {
-    tombstones = await applySharedRemoteTombstones(db, client);
+    const tombstoneResult = await applySharedRemoteTombstones(db, client, sinceValue);
+    tombstones = tombstoneResult.tombstones;
     const remoteSpaceUuids = new Set<string>();
     for (const adapter of SHARED_ADAPTERS) {
-      const { data, error } = await client
-        .from(adapter.remoteTable)
-        .select('*')
-        .order('updated_at', { ascending: true });
+      let query = client.from(adapter.remoteTable).select('*');
+      // The space list is always pulled in full: `expireRemovedSpaces` decides
+      // whether to drop a local space purely from its absence, so filtering the
+      // space rows by a sync watermark could wrongly cull a live space that
+      // simply had no recent changes. Child rows are incremental.
+      if (adapter.localTable !== 'shared_spaces') {
+        query = query.gt('updated_at', sinceValue);
+      }
+      const { data, error } = await query.order('updated_at', { ascending: true });
       if (error) {
         throw new Error(`Shared pull failed for ${adapter.remoteTable}: ${error.message}`);
       }
       for (const remoteRow of (data ?? []) as Record<string, unknown>[]) {
+        // A tombstoned row wins over any nonetheless-surviving remote copy
+        // (e.g. a split that was replaced by an edit but re-inserted by another
+        // device's stale push): never import it, so the shared data converges
+        // on exactly the current set on every member.
+        if (tombstoneResult.tombstonedKeys.has(`${adapter.localTable}:${remoteRow.uuid}`)) {
+          continue;
+        }
         await applySharedRemoteRow(db, adapter, remoteRow, maps);
         pulled += 1;
         if (adapter.localTable === 'shared_spaces' && typeof remoteRow.uuid === 'string') {

@@ -484,6 +484,55 @@ describe('pushSharedChanges', () => {
     expect(client.upsertLog.find((entry) => entry.table === 'shared_spaces')?.row.owner_user_id).toBeUndefined();
     expect(client.insertLog).toHaveLength(7);
   });
+
+  it('does not resurrect splits another device replaced (stale member push)', async () => {
+    const raw = freshDb();
+    const api = makeDbApi(raw) as never;
+    const client = new FakeClient();
+    seedRemote(client);
+    await pullSharedChanges(client as never, api);
+    expect(count(raw, 'shared_expense_splits')).toBe(2);
+
+    // Another device replaces the splits on the remote: old rows deleted and
+    // tombstoned, new split rows uploaded.
+    const splits = client.tables.get('shared_expense_splits') as Map<string, PostgrestRow>;
+    splits.delete('split-1');
+    splits.delete('split-2');
+    client.seed('shared_expense_splits', {
+      uuid: 'split-1b',
+      expense_uuid: 'expense-1',
+      member_uuid: 'member-1',
+      amount_cents: 5000,
+      updated_at: '2026-09-16T00:00:00.000Z',
+    });
+    client.seed('shared_expense_splits', {
+      uuid: 'split-2b',
+      expense_uuid: 'expense-1',
+      member_uuid: 'member-2',
+      amount_cents: 5000,
+      updated_at: '2026-09-16T00:00:00.000Z',
+    });
+    client.seed('shared_sync_tombstones', {
+      space_uuid: 'space-1',
+      table_name: 'shared_expense_splits',
+      row_key: 'split-2',
+      deleted_at: '2026-09-16T00:00:00.000Z',
+    });
+    client.seed('shared_sync_tombstones', {
+      space_uuid: 'space-1',
+      table_name: 'shared_expense_splits',
+      row_key: 'split-1',
+      deleted_at: '2026-09-16T00:00:00.000Z',
+    });
+
+    await pushSharedChanges(client as never, api, 'user-2');
+
+    const remoteSplitUuids = client.rows('shared_expense_splits').map((row) => String(row.uuid));
+    expect(remoteSplitUuids).toContain('split-1b');
+    expect(remoteSplitUuids).toContain('split-2b');
+    expect(remoteSplitUuids).not.toContain('split-1');
+    expect(remoteSplitUuids).not.toContain('split-2');
+  });
 });
 
 describe('pullSharedChanges', () => {
@@ -555,6 +604,85 @@ describe('pullSharedChanges', () => {
 
     expect(count(raw, 'shared_expenses')).toBe(0);
     expect(count(raw, 'shared_expense_splits')).toBe(0);
+  });
+
+  it('ignores tombstoned rows even when a stale remote copy survives', async () => {
+    const raw = freshDb();
+    const client = new FakeClient();
+    seedRemote(client);
+    const splits = client.tables.get('shared_expense_splits') as Map<string, PostgrestRow>;
+    splits.set('split-1b', {
+      uuid: 'split-1b',
+      expense_uuid: 'expense-1',
+      member_uuid: 'member-1',
+      amount_cents: 5000,
+      updated_at: '2026-09-16T00:00:00.000Z',
+    });
+    client.seed('shared_sync_tombstones', {
+      space_uuid: 'space-1',
+      table_name: 'shared_expense_splits',
+      row_key: 'split-1',
+      deleted_at: '2026-09-16T00:00:00.000Z',
+    });
+
+    await pullSharedChanges(client as never, makeDbApi(raw) as never);
+
+    const localSplits = raw
+      .prepare('SELECT uuid FROM shared_expense_splits ORDER BY id')
+      .all() as Array<{ uuid: string }>;
+    const uuids = localSplits.map((row) => row.uuid);
+    expect(uuids).toContain('split-1b');
+    expect(uuids).not.toContain('split-1');
+  });
+
+  it('updates a linked personal transaction to the new split amount after an edit sync', async () => {
+    const raw = freshDb();
+    const api = makeDbApi(raw) as never;
+    const client = new FakeClient();
+    seedRemote(client);
+    await pullSharedChanges(client as never, api);
+
+    // The remote expense is edited by another device.
+    client.tables.get('shared_expense_splits')?.clear();
+    client.seed('shared_expense_splits', {
+      uuid: 'split-1b',
+      expense_uuid: 'expense-1',
+      member_uuid: 'member-1',
+      amount_cents: 7000,
+      updated_at: '2026-09-16T00:00:00.000Z',
+    });
+    client.seed('shared_expense_splits', {
+      uuid: 'split-2b',
+      expense_uuid: 'expense-1',
+      member_uuid: 'member-2',
+      amount_cents: 3000,
+      updated_at: '2026-09-16T00:00:00.000Z',
+    });
+    client.seed('shared_sync_tombstones', {
+      space_uuid: 'space-1',
+      table_name: 'shared_expense_splits',
+      row_key: 'split-1',
+      deleted_at: '2026-09-16T00:00:00.000Z',
+    });
+    client.seed('shared_sync_tombstones', {
+      space_uuid: 'space-1',
+      table_name: 'shared_expense_splits',
+      row_key: 'split-2',
+      deleted_at: '2026-09-16T00:00:00.000Z',
+    });
+
+    // The member's device pushes its stale copy first (as the engine does),
+    // then pulls, then reconciles its linked transactions.
+    await pushSharedChanges(client as never, api, 'user-2');
+    await pullSharedChanges(client as never, api);
+    await reconcileSharedTransactions('user-2', api);
+
+    const linked = raw
+      .prepare("SELECT amount_cents, origin_id FROM transactions WHERE origin_type = 'shared'")
+      .all() as Array<{ amount_cents: number; origin_id: string }>;
+    expect(linked).toHaveLength(1);
+    expect(linked[0].origin_id).toBe('expense-1');
+    expect(linked[0].amount_cents).toBe(3000);
   });
 
   it('merges two open periods pulled from a sync race into one', async () => {
@@ -650,5 +778,100 @@ describe('pullSharedChanges', () => {
     expect(kept[0].origin_type).toBeNull();
     expect(kept[0].origin_id).toBeNull();
     expect(count(raw, 'shared_sync_tombstones')).toBe(0);
+  });
+
+  it('changesOnly pushes only outbox rows, not the whole database', async () => {
+    const raw = freshDb();
+    raw.exec('DELETE FROM sync_outbox');
+    const { spaceId, periodId, memberOne } = seedSharedSpace(raw);
+    raw.exec('DELETE FROM sync_outbox');
+    raw.exec(
+      `INSERT INTO shared_expenses
+         (space_id, period_id, description, total_amount_cents, date, paid_by_member_id, created_by_user_id)
+       VALUES (${spaceId}, ${periodId}, 'Takeout', 8000, '2026-09-16', ${memberOne}, 'user-1')`
+    );
+    const newExpenseId = (
+      raw.prepare('SELECT id FROM shared_expenses ORDER BY id DESC LIMIT 1').get() as { id: number }
+    ).id;
+    raw.exec(
+      `INSERT INTO shared_expense_splits (expense_id, member_id, amount_cents)
+       VALUES (${newExpenseId}, ${memberOne}, 8000)`
+    );
+    const newExpenseUuid = (
+      raw.prepare('SELECT uuid FROM shared_expenses WHERE id = ?').get(newExpenseId) as {
+        uuid: string;
+      }
+    ).uuid;
+    const client = new FakeClient();
+
+    await pushSharedChanges(client as never, makeDbApi(raw) as never, 'user-1', {
+      changesOnly: true,
+    });
+
+    expect(client.rows('shared_spaces')).toHaveLength(0);
+    expect(client.rows('shared_space_members')).toHaveLength(0);
+    expect(client.rows('shared_periods')).toHaveLength(0);
+    expect(client.rows('shared_expenses').map((row) => row.uuid)).toEqual([newExpenseUuid]);
+    expect(client.rows('shared_expense_splits')).toHaveLength(1);
+    expect(count(raw, 'sync_outbox')).toBe(0);
+  });
+
+  it('incremental pull imports changed rows and never expires an unchanged space', async () => {
+    const raw = freshDb();
+    const api = makeDbApi(raw) as never;
+    const client = new FakeClient();
+    seedRemote(client);
+    await pullSharedChanges(client as never, api);
+
+    client.seed('shared_expenses', {
+      uuid: 'expense-2',
+      space_uuid: 'space-1',
+      period_uuid: 'period-1',
+      description: 'Takeout',
+      total_amount_cents: 8000,
+      date: '2026-09-16',
+      paid_by_member_uuid: 'member-2',
+      note: null,
+      created_by_user_id: 'user-2',
+      deleted: false,
+      updated_at: '2026-09-16T00:00:00.000Z',
+    });
+    client.seed('shared_expense_splits', {
+      uuid: 'split-3',
+      expense_uuid: 'expense-2',
+      member_uuid: 'member-2',
+      amount_cents: 4000,
+      updated_at: '2026-09-16T00:00:00.000Z',
+    });
+    client.seed('shared_expense_splits', {
+      uuid: 'split-4',
+      expense_uuid: 'expense-2',
+      member_uuid: 'member-1',
+      amount_cents: 4000,
+      updated_at: '2026-09-16T00:00:00.000Z',
+    });
+    client.seed('shared_sync_tombstones', {
+      space_uuid: 'space-1',
+      table_name: 'shared_expense_splits',
+      row_key: 'split-2',
+      deleted_at: '2026-09-16T00:00:00.000Z',
+    });
+    client.tables.get('shared_expense_splits')?.delete('split-2');
+
+    await pullSharedChanges(client as never, api, '2026-09-15T00:00:05.000Z');
+
+    const expenses = raw
+      .prepare('SELECT uuid, total_amount_cents FROM shared_expenses ORDER BY id')
+      .all() as Array<{ uuid: string; total_amount_cents: number }>;
+    expect(expenses).toHaveLength(2);
+    expect(expenses.some((e) => e.uuid === 'expense-2' && e.total_amount_cents === 8000)).toBe(true);
+    const splits = raw
+      .prepare('SELECT uuid FROM shared_expense_splits ORDER BY id')
+      .all() as Array<{ uuid: string }>;
+    expect(splits.map((s) => s.uuid)).not.toContain('split-2');
+    expect(splits.map((s) => s.uuid).sort()).toEqual(['split-1', 'split-3', 'split-4']);
+    expect(count(raw, 'shared_spaces')).toBe(1);
+    expect(count(raw, 'shared_space_members')).toBe(2);
+    expect(count(raw, 'shared_periods')).toBe(1);
   });
 });

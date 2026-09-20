@@ -263,6 +263,10 @@ describe('buildPeriodReport', () => {
       periodEnd: '2026-09-30',
       closedAt: '2026-10-01T00:00:00.000Z',
       memberIds: [1, 2],
+      members: [
+        { memberId: 1, uuid: 'member-uuid-1', displayName: 'Alice', email: 'alice@example.com' },
+        { memberId: 2, uuid: 'member-uuid-2', displayName: null, email: 'bob@example.com' },
+      ],
       expenses: [
         {
           description: 'Rent',
@@ -278,6 +282,10 @@ describe('buildPeriodReport', () => {
     });
     expect(report.spaceName).toBe('Home');
     expect(report.expenses).toHaveLength(1);
+    expect(report.members).toEqual([
+      { memberId: 1, uuid: 'member-uuid-1', displayName: 'Alice', email: 'alice@example.com' },
+      { memberId: 2, uuid: 'member-uuid-2', displayName: null, email: 'bob@example.com' },
+    ]);
     expect(report.memberTotals).toEqual([
       { memberId: 1, paidCents: 100000 },
       { memberId: 2, paidCents: 0 },
@@ -285,5 +293,33 @@ describe('buildPeriodReport', () => {
     expect(report.settlements).toEqual([
       { fromMemberId: 2, toMemberId: 1, amountCents: 50000 },
     ]);
+  });
+
+  it('embeds the member snapshot so names survive device-local id differences', () => {
+    const report = buildPeriodReport({
+      spaceName: 'Home',
+      periodStart: '2026-09-01',
+      periodEnd: '2026-09-30',
+      closedAt: '2026-10-01T00:00:00.000Z',
+      memberIds: [7],
+      members: [
+        { memberId: 7, uuid: 'owner-uuid', displayName: 'Mia', email: 'mia@example.com' },
+      ],
+      expenses: [
+        {
+          description: 'Rent',
+          date: '2026-09-02',
+          paidByMemberId: 7,
+          totalAmountCents: 10000,
+          splits: [{ memberId: 7, amountCents: 10000 }],
+        },
+      ],
+    });
+    expect(report.members[0]).toEqual({
+      memberId: 7,
+      uuid: 'owner-uuid',
+      displayName: 'Mia',
+      email: 'mia@example.com',
+    });
   });
 });

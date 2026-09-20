@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { SQLiteDatabase, SQLiteBindValue } from 'expo-sqlite';
 
 import { withPullGuard } from '../database/syncMeta';
+import { decoupleSharedTransactions } from '../database/sharedLinking';
 import { SHARED_ADAPTERS } from './shared-serialize';
 import { isRemoteNewer, nowIso } from './time';
 import type { SyncTableAdapter } from './serialize';
@@ -324,17 +325,25 @@ async function pushSharedTombstones(
     if (deleteError) {
       throw new Error(`Shared delete failed for ${adapter.remoteTable}: ${deleteError.message}`);
     }
-    const { error: tombstoneError } = await client.from('shared_sync_tombstones').upsert(
-      {
-        space_uuid: tombstone.space_uuid,
-        table_name: tombstone.table_name,
-        row_key: tombstone.row_key,
-        deleted_at: tombstone.deleted_at,
-      },
-      { onConflict: 'space_uuid,table_name,row_key' }
-    );
-    if (tombstoneError) {
-      throw new Error(`Shared tombstone failed: ${tombstoneError.message}`);
+    // A space deletion needs no remote tombstone: deleting the shared_spaces row
+    // cascades every child row off the remote anyway, and a tombstone row
+    // referencing the deleted space would be cascade-deleted (or FK-rejected) on
+    // insert. Other devices detect the removal on pull by the space row being
+    // gone. All other shared tables re-write the tombstone first so contact
+    // that leaves other members offline can still catch up later.
+    if (adapter.localTable !== 'shared_spaces') {
+      const { error: tombstoneError } = await client.from('shared_sync_tombstones').upsert(
+        {
+          space_uuid: tombstone.space_uuid,
+          table_name: tombstone.table_name,
+          row_key: tombstone.row_key,
+          deleted_at: tombstone.deleted_at,
+        },
+        { onConflict: 'space_uuid,table_name,row_key' }
+      );
+      if (tombstoneError) {
+        throw new Error(`Shared tombstone failed: ${tombstoneError.message}`);
+      }
     }
     await db.runAsync(
       'DELETE FROM shared_sync_tombstones WHERE table_name = ? AND row_key = ?',
@@ -439,9 +448,51 @@ async function applySharedRemoteTombstones(
   return applied;
 }
 
+async function expireRemovedSpaces(
+  db: SQLiteDatabase,
+  remoteSpaceUuids: Set<string>
+): Promise<number> {
+  const locals = await db.getAllAsync<{ id: number; uuid: string }>(
+    'SELECT id, uuid FROM shared_spaces WHERE uuid IS NOT NULL'
+  );
+  let removed = 0;
+  for (const space of locals) {
+    if (remoteSpaceUuids.has(space.uuid)) {
+      continue;
+    }
+    const expenseUuids = (
+      await db.getAllAsync<{ uuid: string | null }>(
+        'SELECT uuid FROM shared_expenses WHERE space_id = ? AND uuid IS NOT NULL',
+        [space.id]
+      )
+    ).map((row) => row.uuid as string);
+    await decoupleSharedTransactions(expenseUuids, db);
+    await db.runAsync(
+      `DELETE FROM shared_expense_splits
+        WHERE expense_id IN (SELECT id FROM shared_expenses WHERE space_id = ?)`,
+      [space.id]
+    );
+    await db.runAsync('DELETE FROM shared_expenses WHERE space_id = ?', [space.id]);
+    await db.runAsync('DELETE FROM shared_period_reports WHERE space_id = ?', [space.id]);
+    await db.runAsync('DELETE FROM shared_periods WHERE space_id = ?', [space.id]);
+    await db.runAsync('DELETE FROM shared_space_members WHERE space_id = ?', [space.id]);
+    await db.runAsync('DELETE FROM shared_spaces WHERE id = ?', [space.id]);
+    removed += 1;
+  }
+  // Drop 'left' membership rows left behind after their space stopped being
+  // visible (e.g. the removed user pulled their own row, then the space).
+  await db.runAsync(
+    `DELETE FROM shared_space_members
+      WHERE status = 'left'
+        AND NOT EXISTS (SELECT 1 FROM shared_spaces s WHERE s.id = shared_space_members.space_id)`
+  );
+  return removed;
+}
+
 export interface SharedPullResult {
   pulled: number;
   tombstones: number;
+  expiredSpaces: number;
 }
 
 export async function pullSharedChanges(
@@ -451,8 +502,10 @@ export async function pullSharedChanges(
   const maps = await loadPullFkMaps(db);
   let pulled = 0;
   let tombstones = 0;
+  let expired = 0;
   await withPullGuard(db, async () => {
     tombstones = await applySharedRemoteTombstones(db, client);
+    const remoteSpaceUuids = new Set<string>();
     for (const adapter of SHARED_ADAPTERS) {
       const { data, error } = await client
         .from(adapter.remoteTable)
@@ -464,8 +517,15 @@ export async function pullSharedChanges(
       for (const remoteRow of (data ?? []) as Record<string, unknown>[]) {
         await applySharedRemoteRow(db, adapter, remoteRow, maps);
         pulled += 1;
+        if (adapter.localTable === 'shared_spaces' && typeof remoteRow.uuid === 'string') {
+          remoteSpaceUuids.add(remoteRow.uuid);
+        }
       }
     }
+    // A space vanishes from a member's pull when it is deleted by the owner or
+    // when that member's own access is revoked: drop the local copy (and its
+    // children) and decouple, never delete, the linked personal transactions.
+    expired = await expireRemovedSpaces(db, remoteSpaceUuids);
   });
-  return { pulled, tombstones };
+  return { pulled, tombstones, expiredSpaces: expired };
 }

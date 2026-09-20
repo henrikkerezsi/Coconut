@@ -33,10 +33,13 @@ import {
   acceptInvite,
   addPendingMember,
   createSharedSpace,
+  deleteSharedSpace,
   getAllSharedSpaces,
   getPendingInvitesForEmail,
   getSharedSpace,
   getSpaceMembers,
+  removeSpaceMember,
+  renameSharedSpace,
 } from '../../database/sharedSpaces';
 import { closePeriod, ensureOpenPeriod, getOpenPeriod } from '../../database/sharedPeriods';
 import {
@@ -79,6 +82,10 @@ export default function SharedScreen() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [closeOpen, setCloseOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameName, setRenameName] = useState('');
+  const [removeTarget, setRemoveTarget] = useState<SharedSpaceMember | null>(null);
+  const [deleteSpaceOpen, setDeleteSpaceOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -264,6 +271,68 @@ export default function SharedScreen() {
     }
   }
 
+  function openRenameSpace(): void {
+    if (!selectedSpace) {
+      return;
+    }
+    setRenameName(selectedSpace.name);
+    setRenameOpen(true);
+  }
+
+  async function handleRenameSpace(): Promise<void> {
+    if (selectedId === null || renameName.trim().length === 0) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await renameSharedSpace(selectedId, renameName.trim());
+      setRenameOpen(false);
+      await reload();
+      await refresh();
+    } catch {
+      setToast('Could not rename the space');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRemoveMember(): Promise<void> {
+    if (selectedId === null || removeTarget === null) {
+      return;
+    }
+    const member = removeTarget;
+    setRemoveTarget(null);
+    setBusy(true);
+    try {
+      await removeSpaceMember(member.id);
+      await loadSpace(selectedId);
+      await refresh();
+    } catch {
+      setToast('Could not remove the member');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteSpace(): Promise<void> {
+    if (selectedId === null) {
+      return;
+    }
+    const id = selectedId;
+    setDeleteSpaceOpen(false);
+    setBusy(true);
+    try {
+      await deleteSharedSpace(id);
+      selectedRef.current = null;
+      await reload();
+      await refresh();
+    } catch {
+      setToast('Could not delete the space');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleClosePeriod(): Promise<void> {
     if (!sessionUser || !selectedSpace || !period) {
       return;
@@ -364,12 +433,16 @@ export default function SharedScreen() {
               reports={reports}
               pendingInvites={pending}
               canInvite={currentMember?.role === 'owner'}
+              canManage={currentMember?.role === 'owner'}
               canClosePeriod={period !== null && expenses.length > 0}
               busy={busy}
               onSelectSpace={(space) => void selectSpace(space)}
               onCreateSpace={() => setCreateOpen(true)}
               onInvite={() => setInviteOpen(true)}
               onAcceptInvite={(member) => void handleAccept(member)}
+              onRenameSpace={openRenameSpace}
+              onRemoveMember={(member) => setRemoveTarget(member)}
+              onDeleteSpace={() => setDeleteSpaceOpen(true)}
               onOpenBalances={() => {
                 if (selectedSpace) {
                   router.push({
@@ -549,6 +622,88 @@ export default function SharedScreen() {
             <Button onPress={() => setCloseOpen(false)}>Cancel</Button>
             <Button mode="contained" loading={busy} onPress={() => void handleClosePeriod()}>
               Close period
+            </Button>
+          </AppDialog.Actions>
+        </AppDialog>
+
+        <AppDialog
+          visible={renameOpen}
+          onDismiss={() => setRenameOpen(false)}
+          style={{ borderRadius: theme.radii.small }}
+        >
+          <AppDialog.Title>Rename space</AppDialog.Title>
+          <AppDialog.Content>
+            <PaperTextInput
+              mode="outlined"
+              label="Name"
+              value={renameName}
+              onChangeText={setRenameName}
+              autoFocus
+            />
+          </AppDialog.Content>
+          <AppDialog.Actions>
+            <Button onPress={() => setRenameOpen(false)}>Cancel</Button>
+            <Button
+              mode="contained"
+              loading={busy}
+              disabled={busy || renameName.trim().length === 0}
+              onPress={() => void handleRenameSpace()}
+            >
+              Save
+            </Button>
+          </AppDialog.Actions>
+        </AppDialog>
+
+        {removeTarget !== null ? (
+          <AppDialog
+            visible
+            onDismiss={() => setRemoveTarget(null)}
+            style={{ borderRadius: theme.radii.small }}
+          >
+            <AppDialog.Title>Remove {sharedMemberName(removeTarget)}?</AppDialog.Title>
+            <AppDialog.Content>
+              <Text variant="bodyMedium">
+                {sharedMemberName(removeTarget)} will lose access to this space on all their
+                devices. Their linked personal expenses are kept and become ordinary
+                transactions.
+              </Text>
+            </AppDialog.Content>
+            <AppDialog.Actions>
+              <Button onPress={() => setRemoveTarget(null)}>Cancel</Button>
+              <Button
+                mode="contained"
+                buttonColor={theme.semantic.delete}
+                loading={busy}
+                onPress={() => void handleRemoveMember()}
+              >
+                Remove
+              </Button>
+            </AppDialog.Actions>
+          </AppDialog>
+        ) : null}
+
+        <AppDialog
+          visible={deleteSpaceOpen}
+          onDismiss={() => setDeleteSpaceOpen(false)}
+          style={{ borderRadius: theme.radii.small }}
+        >
+          <AppDialog.Title>Delete this space?</AppDialog.Title>
+          <AppDialog.Content>
+            <Text variant="bodyMedium">
+              Everyone loses access and the shared expenses are removed from all devices. Your
+              linked personal expenses are kept and become ordinary transactions. This cannot
+              be undone.
+            </Text>
+          </AppDialog.Content>
+          <AppDialog.Actions>
+            <Button onPress={() => setDeleteSpaceOpen(false)}>Cancel</Button>
+            <Button
+              mode="contained"
+              buttonColor={theme.semantic.delete}
+              loading={busy}
+              onPress={() => void handleDeleteSpace()}
+            >
+              Delete
             </Button>
           </AppDialog.Actions>
         </AppDialog>

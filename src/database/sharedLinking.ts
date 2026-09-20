@@ -11,6 +11,24 @@ interface LinkedSplitRow {
   description: string;
 }
 
+export async function decoupleSharedTransactions(
+  expenseUuids: string[],
+  db?: SQLiteDatabase
+): Promise<number> {
+  if (expenseUuids.length === 0) {
+    return 0;
+  }
+  const database = db ?? (await getDatabase());
+  const placeholders = expenseUuids.map(() => '?').join(', ');
+  const result = await database.runAsync(
+    `UPDATE transactions
+        SET origin_type = NULL, origin_id = NULL
+      WHERE origin_type = 'shared' AND origin_id IN (${placeholders})`,
+    expenseUuids
+  );
+  return Number((result as { changes?: number }).changes ?? 0);
+}
+
 export async function reconcileSharedTransactions(
   userId: string,
   db?: SQLiteDatabase

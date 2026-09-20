@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import {
   Button,
   Divider,
+  Icon,
   IconButton,
   List,
   Menu,
@@ -20,12 +21,16 @@ export interface SharedHeaderMenuProps {
   reports: SharedPeriodReport[];
   pendingInvites: SharedSpaceMember[];
   canInvite: boolean;
+  canManage: boolean;
   canClosePeriod: boolean;
   busy: boolean;
   onSelectSpace: (space: SharedSpace) => void;
   onCreateSpace: () => void;
   onInvite: () => void;
   onAcceptInvite: (member: SharedSpaceMember) => void;
+  onRenameSpace: () => void;
+  onRemoveMember: (member: SharedSpaceMember) => void;
+  onDeleteSpace: () => void;
   onOpenBalances: () => void;
   onOpenReport: (periodId: number) => void;
   onClosePeriod: () => void;
@@ -40,12 +45,16 @@ export function SharedHeaderMenu({
   reports,
   pendingInvites,
   canInvite,
+  canManage,
   canClosePeriod,
   busy,
   onSelectSpace,
   onCreateSpace,
   onInvite,
   onAcceptInvite,
+  onRenameSpace,
+  onRemoveMember,
+  onDeleteSpace,
   onOpenBalances,
   onOpenReport,
   onClosePeriod,
@@ -163,6 +172,17 @@ export function SharedHeaderMenu({
               }}
             />
           ) : null}
+          {canManage ? (
+            <Menu.Item
+              leadingIcon="pencil-outline"
+              title="Rename space"
+              disabled={busy}
+              onPress={() => {
+                closeMenu();
+                onRenameSpace();
+              }}
+            />
+          ) : null}
           <Divider />
           <PaperText variant="labelLarge" style={styles.sectionLabel}>
             Members
@@ -178,6 +198,21 @@ export function SharedHeaderMenu({
                   icon={member.role === 'owner' ? 'crown-outline' : 'account-outline'}
                 />
               )}
+              right={
+                canManage && member.role !== 'owner'
+                  ? () => (
+                      <IconButton
+                        icon="account-remove-outline"
+                        disabled={busy}
+                        onPress={() => {
+                          closeMenu();
+                          onRemoveMember(member);
+                        }}
+                        accessibilityLabel={`Remove ${sharedMemberName(member)}`}
+                      />
+                    )
+                  : undefined
+              }
             />
           ))}
           {reports.length > 0 ? (
@@ -199,6 +234,23 @@ export function SharedHeaderMenu({
                   }}
                 />
               ))}
+            </>
+          ) : null}
+          {canManage ? (
+            <>
+              <Divider style={styles.dangerDivider} />
+              <Menu.Item
+                leadingIcon={({ color, size }) => (
+                  <Icon source="trash-can-outline" size={size} color={theme.semantic.delete} />
+                )}
+                title="Delete space"
+                titleStyle={{ color: theme.semantic.delete }}
+                disabled={busy}
+                onPress={() => {
+                  closeMenu();
+                  onDeleteSpace();
+                }}
+              />
             </>
           ) : null}
           <View style={styles.closeWrapper}>
@@ -240,6 +292,10 @@ const styles = StyleSheet.create({
   },
   closeWrapper: {
     marginTop: 8,
+  },
+  dangerDivider: {
+    marginTop: 8,
+    marginBottom: 4,
   },
   closeButton: {
     borderRadius: 0,

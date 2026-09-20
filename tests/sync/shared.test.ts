@@ -4,6 +4,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { MIGRATIONS } from '../../src/database/migrations';
 import { pushSharedChanges, pullSharedChanges } from '../../src/sync/shared';
 import { SHARED_REMOTE_COLUMNS } from '../../src/sync/shared-serialize';
+import { deleteSharedSpace } from '../../src/database/sharedSpaces';
+import { reconcileSharedTransactions } from '../../src/database/sharedLinking';
 
 interface PostgrestRow {
   [key: string]: unknown;
@@ -64,13 +66,54 @@ class FakeQuery {
     return true;
   }
 
+  private cascadeSpaceDelete(deletedUuids: Set<string>): void {
+    if (deletedUuids.size === 0) {
+      return;
+    }
+    const spaceChildren = [
+      'shared_space_members',
+      'shared_periods',
+      'shared_expenses',
+      'shared_period_reports',
+      'shared_sync_tombstones',
+    ];
+    const deletedExpenseUuids = new Set<string>();
+    for (const child of spaceChildren) {
+      const table = this.client.tables.get(child);
+      if (!table) {
+        continue;
+      }
+      for (const [key, row] of [...table.entries()]) {
+        if (deletedUuids.has(String(row.space_uuid ?? ''))) {
+          table.delete(key);
+          if (child === 'shared_expenses') {
+            deletedExpenseUuids.add(String(row.uuid ?? ''));
+          }
+        }
+      }
+    }
+    const splits = this.client.tables.get('shared_expense_splits');
+    if (splits) {
+      for (const [key, row] of [...splits.entries()]) {
+        if (deletedExpenseUuids.has(String(row.expense_uuid ?? ''))) {
+          splits.delete(key);
+        }
+      }
+    }
+  }
+
   private run(): { data: PostgrestRow[]; error: null } {
     const table = this.client.tables.get(this.table) ?? new Map<string, PostgrestRow>();
     if (this.mode === 'delete') {
+      const deleted: string[] = [];
       for (const [key, row] of [...table.entries()]) {
         if (this.matches(row)) {
           table.delete(key);
+          deleted.push(String(row.uuid ?? ''));
         }
+      }
+      if (this.table === 'shared_spaces') {
+        this.cascadeSpaceDelete(new Set(deleted));
       }
       return { data: [], error: null };
     }
@@ -155,6 +198,7 @@ interface TestDb {
   getFirstAsync<T>(sql: string, params?: unknown[]): Promise<T | null>;
   getAllAsync<T>(sql: string, params?: unknown[]): Promise<T[]>;
   runAsync(sql: string, params?: unknown[]): Promise<unknown>;
+  withTransactionAsync<T>(task: () => Promise<T>): Promise<T>;
 }
 
 type SqlParams = Parameters<ReturnType<DatabaseSync['prepare']>['get']>;
@@ -175,6 +219,9 @@ function makeDbApi(raw: DatabaseSync): TestDb {
         lastInsertRowId: Number(result.lastInsertRowid),
         changes: Number(result.changes),
       });
+    },
+    withTransactionAsync<T>(task: () => Promise<T>): Promise<T> {
+      return task();
     },
   };
 }
@@ -399,6 +446,25 @@ describe('pushSharedChanges', () => {
     expect(count(raw, 'shared_sync_tombstones')).toBe(0);
   });
 
+  it('deletes a removed space remotely without writing a remote tombstone', async () => {
+    const raw = freshDb();
+    const fixture = seedSharedSpace(raw);
+    const client = new FakeClient();
+    await pushSharedChanges(client as never, makeDbApi(raw) as never, 'user-1');
+    expect(client.rows('shared_spaces')).toHaveLength(1);
+
+    await deleteSharedSpace(fixture.spaceId, makeDbApi(raw) as never);
+    await pushSharedChanges(client as never, makeDbApi(raw) as never, 'user-1');
+
+    expect(client.rows('shared_spaces')).toHaveLength(0);
+    expect(client.rows('shared_periods')).toHaveLength(0);
+    expect(client.rows('shared_expenses')).toHaveLength(0);
+    expect(client.rows('shared_expense_splits')).toHaveLength(0);
+    expect(client.rows('shared_space_members')).toHaveLength(0);
+    expect(client.rows('shared_sync_tombstones')).toHaveLength(0);
+    expect(count(raw, 'shared_sync_tombstones')).toBe(0);
+  });
+
   it('inserts brand-new rows instead of upserting them so first-time shared rows pass RLS', async () => {
     const raw = freshDb();
     seedSharedSpace(raw);
@@ -489,5 +555,46 @@ describe('pullSharedChanges', () => {
 
     expect(count(raw, 'shared_expenses')).toBe(0);
     expect(count(raw, 'shared_expense_splits')).toBe(0);
+  });
+
+  it('expires a space that vanished remotely and decouples its linked transactions', async () => {
+    const raw = freshDb();
+    const client = new FakeClient();
+    seedRemote(client);
+    await pullSharedChanges(client as never, makeDbApi(raw) as never);
+    await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
+    expect(count(raw, 'transactions')).toBe(1);
+
+    for (const table of [
+      'shared_spaces',
+      'shared_space_members',
+      'shared_periods',
+      'shared_expenses',
+      'shared_expense_splits',
+    ]) {
+      client.tables.get(table)?.clear();
+    }
+    await pullSharedChanges(client as never, makeDbApi(raw) as never);
+
+    expect(count(raw, 'shared_spaces')).toBe(0);
+    expect(count(raw, 'shared_space_members')).toBe(0);
+    expect(count(raw, 'shared_periods')).toBe(0);
+    expect(count(raw, 'shared_expenses')).toBe(0);
+    expect(count(raw, 'shared_expense_splits')).toBe(0);
+
+    const kept = raw
+      .prepare('SELECT amount_cents, merchant, origin_type, origin_id FROM transactions')
+      .all() as Array<{
+      amount_cents: number;
+      merchant: string;
+      origin_type: string | null;
+      origin_id: string | null;
+    }>;
+    expect(kept).toHaveLength(1);
+    expect(kept[0].amount_cents).toBe(4000);
+    expect(kept[0].merchant).toBe('Dinner');
+    expect(kept[0].origin_type).toBeNull();
+    expect(kept[0].origin_id).toBeNull();
+    expect(count(raw, 'shared_sync_tombstones')).toBe(0);
   });
 });

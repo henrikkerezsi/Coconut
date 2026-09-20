@@ -2,7 +2,7 @@
 
 import { DatabaseSync } from 'node:sqlite';
 import { MIGRATIONS } from '../../src/database/migrations';
-import { reconcileSharedTransactions } from '../../src/database/sharedLinking';
+import { decoupleSharedTransactions, reconcileSharedTransactions } from '../../src/database/sharedLinking';
 
 interface TestDb {
   getFirstAsync<T>(sql: string, params?: unknown[]): Promise<T | null>;
@@ -182,5 +182,31 @@ describe('reconcileSharedTransactions', () => {
     await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
 
     expect(linkedTransactions(raw)).toHaveLength(0);
+  });
+});
+
+describe('decoupleSharedTransactions', () => {
+  it('clears the link but keeps the personal transaction', async () => {
+    const raw = freshDb();
+    const fixture = seedSpace(raw);
+    const { uuid } = addExpense(raw, fixture, 10000, 4000, 6000);
+    await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
+    expect(linkedTransactions(raw)).toHaveLength(1);
+
+    const changes = await decoupleSharedTransactions([uuid], makeDbApi(raw) as never);
+
+    expect(changes).toBe(1);
+    const kept = linkedTransactions(raw);
+    expect(kept).toHaveLength(1);
+    expect(kept[0].amount_cents).toBe(4000);
+    expect(kept[0].merchant).toBe('Dinner');
+    expect(kept[0].origin_type).toBeNull();
+    expect(kept[0].origin_id).toBeNull();
+  });
+
+  it('is a no-op for an empty list', async () => {
+    const raw = freshDb();
+    const changes = await decoupleSharedTransactions([], makeDbApi(raw) as never);
+    expect(changes).toBe(0);
   });
 });

@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { SharedMemberRole, SharedMemberStatus, SharedSpace, SharedSpaceMember } from '../models';
 import { getDatabase } from './database';
+import { decoupleSharedTransactions } from './sharedLinking';
 
 interface SharedSpaceRow {
   id: number;
@@ -112,6 +113,78 @@ export async function renameSharedSpace(
 ): Promise<void> {
   const database = db ?? (await getDatabase());
   await database.runAsync('UPDATE shared_spaces SET name = ? WHERE id = ?', [name.trim(), id]);
+}
+
+export async function removeSpaceMember(
+  memberId: number,
+  db?: SQLiteDatabase
+): Promise<void> {
+  const database = db ?? (await getDatabase());
+  const member = await database.getFirstAsync<SharedMemberRow>(
+    'SELECT * FROM shared_space_members WHERE id = ?',
+    [memberId]
+  );
+  if (!member || member.role === 'owner') {
+    return;
+  }
+  await database.runAsync("UPDATE shared_space_members SET status = 'left' WHERE id = ?", [
+    memberId,
+  ]);
+}
+
+export async function deleteSharedSpace(id: number, db?: SQLiteDatabase): Promise<void> {
+  const database = db ?? (await getDatabase());
+  await database.withTransactionAsync(async () => {
+    const space = await database.getFirstAsync<SharedSpaceRow>(
+      'SELECT * FROM shared_spaces WHERE id = ?',
+      [id]
+    );
+    if (!space) {
+      return;
+    }
+    const expenseUuids = await database.getAllAsync<{ uuid: string | null }>(
+      'SELECT uuid FROM shared_expenses WHERE space_id = ? AND uuid IS NOT NULL',
+      [id]
+    );
+    await decoupleSharedTransactions(
+      expenseUuids.map((row) => row.uuid as string),
+      database
+    );
+    // Delete children before the space so the DELETE triggers can resolve each
+    // tombstone's space_uuid from the still-present shared_spaces row.
+    await database.runAsync(
+      `DELETE FROM shared_expense_splits
+        WHERE expense_id IN (SELECT id FROM shared_expenses WHERE space_id = ?)`,
+      [id]
+    );
+    await database.runAsync('DELETE FROM shared_expenses WHERE space_id = ?', [id]);
+    await database.runAsync('DELETE FROM shared_period_reports WHERE space_id = ?', [id]);
+    await database.runAsync('DELETE FROM shared_periods WHERE space_id = ?', [id]);
+    await database.runAsync('DELETE FROM shared_space_members WHERE space_id = ?', [id]);
+    await database.runAsync('DELETE FROM shared_spaces WHERE id = ?', [id]);
+    // Child tombstones are dropped: on the remote side the space row's cascade
+    // wipes them anyway. The space's own tombstone survives to drive the remote
+    // DELETE (which is what triggers that cascade for other members).
+    await database.runAsync(
+      `DELETE FROM shared_sync_tombstones
+        WHERE table_name != 'shared_spaces'
+          AND NOT EXISTS (SELECT 1 FROM shared_spaces s WHERE s.uuid = shared_sync_tombstones.space_uuid)`,
+      []
+    );
+    if (space.uuid) {
+      await database.runAsync(
+        `INSERT INTO shared_sync_tombstones (table_name, row_key, space_uuid, deleted_at)
+         VALUES ('shared_spaces', ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+         ON CONFLICT (table_name, row_key) DO UPDATE SET deleted_at = excluded.deleted_at`,
+        [space.uuid, space.uuid]
+      );
+    } else {
+      await database.runAsync(
+        "DELETE FROM shared_sync_tombstones WHERE table_name = 'shared_spaces' AND row_key IS NULL",
+        []
+      );
+    }
+  });
 }
 
 export async function getSpaceMembers(

@@ -42,4 +42,12 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
       await db.execAsync(`PRAGMA user_version = ${migration.id}`);
     });
   }
+  await ensureSyncStateColumns(db);
+}
+
+async function ensureSyncStateColumns(db: SQLiteDatabase): Promise<void> {
+  const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(sync_state)');
+  if (columns.length > 0 && !columns.some((c) => c.name === 'last_sync_error')) {
+    await db.execAsync('ALTER TABLE sync_state ADD COLUMN last_sync_error TEXT;');
+  }
 }

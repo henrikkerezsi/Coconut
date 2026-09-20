@@ -217,6 +217,9 @@ async function listPushEntries(db: SQLiteDatabase): Promise<Map<string, OutboxEn
       continue;
     }
     const list = seeded.get(entry.table_name) ?? [];
+    if (list.some((e) => e.row_key === entry.row_key)) {
+      continue;
+    }
     list.push(entry);
     seeded.set(entry.table_name, list);
   }
@@ -228,7 +231,8 @@ async function pushSharedRow(
   db: SQLiteDatabase,
   adapter: SyncTableAdapter,
   entry: OutboxEntry,
-  maps: PushFkMaps
+  maps: PushFkMaps,
+  userId: string
 ): Promise<void> {
   const localRow = await readLocalRow(db, adapter, entry.row_key);
   if (!localRow) {
@@ -247,7 +251,7 @@ async function pushSharedRow(
   if (error) {
     throw new Error(`Shared push lookup failed for ${adapter.remoteTable}: ${error.message}`);
   }
-  if (data && !isRemoteNewer(localUpdatedAt, data.updated_at as string | null)) {
+  if (data && isRemoteNewer(localUpdatedAt, data.updated_at as string | null)) {
     await db.runAsync('DELETE FROM sync_outbox WHERE table_name = ? AND row_key = ?', [
       entry.table_name,
       entry.row_key,
@@ -259,11 +263,28 @@ async function pushSharedRow(
     updated_at: localUpdatedAt ?? new Date().toISOString(),
     ...adapter.toRemote(localRow, pushFkResolver(maps)),
   };
-  const { error: upsertError } = await client
-    .from(adapter.remoteTable)
-    .upsert(payload, { onConflict: 'uuid' });
-  if (upsertError) {
-    throw new Error(`Shared push failed for ${adapter.remoteTable}: ${upsertError.message}`);
+  // Ownership is assigned from auth.uid() on insert: the client always claims a
+  // brand-new space with the signed-in user's id so the insert passes RLS even
+  // on projects whose column lacks the default, while existing rows are never
+  // touched so members cannot re-own a space.
+  if (adapter.localTable === 'shared_spaces') {
+    if (data) {
+      delete payload.owner_user_id;
+    } else {
+      payload.owner_user_id = userId;
+    }
+  }
+  // Brand-new rows use a plain insert: an upsert with an ON CONFLICT arbiter
+  // requires the proposed row to also satisfy the shared table's SELECT policy,
+  // which is membership/ownership-based and can never match a row that does not
+  // exist yet (the first push of a new space always failed RLS). Existing rows
+  // keep the upsert so last-write-wins still merges diverged copies.
+  const table = client.from(adapter.remoteTable);
+  const { error: writeError } = data
+    ? await table.upsert(payload, { onConflict: 'uuid' })
+    : await table.insert(payload);
+  if (writeError) {
+    throw new Error(`Shared push failed for ${adapter.remoteTable}: ${writeError.message}`);
   }
   await db.runAsync('DELETE FROM sync_outbox WHERE table_name = ? AND row_key = ?', [
     entry.table_name,
@@ -330,7 +351,8 @@ export interface SharedPushResult {
 
 export async function pushSharedChanges(
   client: SupabaseClient,
-  db: SQLiteDatabase
+  db: SQLiteDatabase,
+  userId: string
 ): Promise<SharedPushResult> {
   await backfillSharedRows(db);
   const maps = await loadPushFkMaps(db);
@@ -338,7 +360,7 @@ export async function pushSharedChanges(
   let pushed = 0;
   for (const adapter of SHARED_ADAPTERS) {
     for (const entry of entriesByTable.get(adapter.localTable) ?? []) {
-      await pushSharedRow(client, db, adapter, entry, maps);
+      await pushSharedRow(client, db, adapter, entry, maps, userId);
       pushed += 1;
     }
   }

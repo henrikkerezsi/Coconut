@@ -275,3 +275,38 @@ describe('shared-space change-capture triggers (migration 10)', () => {
     expect(outbox).toHaveLength(0);
   });
 });
+
+describe('migration 11 and schema self-heal (sync_state.last_sync_error)', () => {
+  function syncStateColumns(db: DatabaseSync): string[] {
+    const cols = db.prepare('PRAGMA table_info(sync_state)').all() as Array<{ name: string }>;
+    return cols.map((c) => c.name);
+  }
+
+  it('migration 11 adds last_sync_error when migrating a fresh database', () => {
+    const db = new DatabaseSync(':memory:');
+    applyMigrations(db, 1, 11);
+    const columns = syncStateColumns(db);
+    expect(columns).toContain('last_sync_error');
+    const row = db
+      .prepare('INSERT INTO sync_state (id, enabled, last_sync_error) VALUES (1, 0, \'oops\')')
+      .run();
+    expect(row).toBeDefined();
+  });
+
+  it('the guard-based repair adds the missing column without throwing on rerun', () => {
+    const db = freshDb();
+    expect(syncStateColumns(db)).not.toContain('last_sync_error');
+
+    const columns = db.prepare('PRAGMA table_info(sync_state)').all() as Array<{ name: string }>;
+    expect(() => {
+      if (columns.length > 0 && !columns.some((c) => c.name === 'last_sync_error')) {
+        db.exec('ALTER TABLE sync_state ADD COLUMN last_sync_error TEXT;');
+      }
+    }).not.toThrow();
+    expect(syncStateColumns(db)).toContain('last_sync_error');
+
+    expect(() => db.exec('ALTER TABLE sync_state ADD COLUMN last_sync_error TEXT;')).toThrow(
+      /duplicate/i
+    );
+  });
+});

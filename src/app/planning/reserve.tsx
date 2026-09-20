@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Card, List, Portal, SegmentedButtons, Snackbar, TextInput, IconButton } from 'react-native-paper';
+import { Button, Card, List, Portal, SegmentedButtons, TextInput, IconButton } from 'react-native-paper';
 import { useAppData } from '../../data/DataProvider';
 import { getMonthTransfers } from '../../database/reserve';
 import type { ReserveTransfer } from '../../models';
@@ -10,6 +10,7 @@ import { AmountInput } from '../../components/amount-input';
 import { AppDialog } from '../../components/app-dialog';
 import { LoadingScreen } from '../../components/loading-screen';
 import { FadeIn } from '../../components/fade-in';
+import { ScreenToast } from '../../components/screen-toast';
 
 export default function ReserveScreen() {
   const {
@@ -252,9 +253,7 @@ export default function ReserveScreen() {
         </AppDialog>
       </Portal>
 
-      <Snackbar visible={toast !== null} onDismiss={() => setToast(null)} duration={2000}>
-        {toast}
-      </Snackbar>
+      <ScreenToast visible={toast !== null} message={toast} onDismiss={() => setToast(null)} duration={2000} />
     </ScrollView>
   );
 }

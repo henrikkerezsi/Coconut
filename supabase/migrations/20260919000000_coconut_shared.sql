@@ -3,66 +3,6 @@
 -- is the unit of row-level security here (instead of user_id = auth.uid()).
 
 -- ---------------------------------------------------------------------------
--- Membership helpers (security definer so policy subqueries bypass member RLS)
--- ---------------------------------------------------------------------------
-create or replace function public.is_space_owner(space_uuid text)
-returns boolean
-language sql
-security definer
-stable
-set search_path = public
-as $$
-  select exists (
-    select 1 from public.shared_spaces s
-    where s.uuid = space_uuid and s.owner_user_id = auth.uid()
-  );
-$$;
-
-create or replace function public.is_space_member(space_uuid text)
-returns boolean
-language sql
-security definer
-stable
-set search_path = public
-as $$
-  select exists (
-    select 1 from public.shared_space_members m
-    where m.space_uuid = space_uuid
-      and m.user_id = auth.uid()
-      and m.status = 'active'
-  );
-$$;
-
-create or replace function public.has_pending_invite(space_uuid text)
-returns boolean
-language sql
-security definer
-stable
-set search_path = public
-as $$
-  select exists (
-    select 1 from public.shared_space_members m
-    where m.space_uuid = space_uuid
-      and m.status = 'pending'
-      and m.email = lower(auth.jwt() ->> 'email')
-  );
-$$;
-
-create or replace function public.is_expense_space_member(expense_uuid text)
-returns boolean
-language sql
-security definer
-stable
-set search_path = public
-as $$
-  select exists (
-    select 1 from public.shared_expenses e
-    where e.uuid = expense_uuid
-      and public.is_space_member(e.space_uuid)
-  );
-$$;
-
--- ---------------------------------------------------------------------------
 -- Tables
 -- ---------------------------------------------------------------------------
 create table if not exists public.shared_spaces (
@@ -148,6 +88,66 @@ create index if not exists idx_shared_expenses_updated_at on public.shared_expen
 create index if not exists idx_shared_expense_splits_updated_at on public.shared_expense_splits (updated_at);
 create index if not exists idx_shared_period_reports_updated_at on public.shared_period_reports (space_uuid, updated_at);
 create index if not exists idx_shared_sync_tombstones_deleted_at on public.shared_sync_tombstones (space_uuid, deleted_at);
+
+-- ---------------------------------------------------------------------------
+-- Membership helpers (security definer so policy subqueries bypass member RLS)
+-- ---------------------------------------------------------------------------
+create or replace function public.is_space_owner(space_uuid text)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.shared_spaces s
+    where s.uuid = space_uuid and s.owner_user_id = auth.uid()
+  );
+$$;
+
+create or replace function public.is_space_member(space_uuid text)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.shared_space_members m
+    where m.space_uuid = space_uuid
+      and m.user_id = auth.uid()
+      and m.status = 'active'
+  );
+$$;
+
+create or replace function public.has_pending_invite(space_uuid text)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.shared_space_members m
+    where m.space_uuid = space_uuid
+      and m.status = 'pending'
+      and m.email = lower(auth.jwt() ->> 'email')
+  );
+$$;
+
+create or replace function public.is_expense_space_member(expense_uuid text)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.shared_expenses e
+    where e.uuid = expense_uuid
+      and public.is_space_member(e.space_uuid)
+  );
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Row-level security

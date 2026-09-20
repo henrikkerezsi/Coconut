@@ -408,4 +408,11 @@ ${syncTriggersSql()}
     description: 'Shared spaces, periods, expenses, splits and reports',
     sql: SHARED_SCHEMA_SQL,
   },
+  {
+    id: 11,
+    description: 'Last sync error for visible diagnostics',
+    sql: `
+ALTER TABLE sync_state ADD COLUMN last_sync_error TEXT;
+`,
+  },
 ];

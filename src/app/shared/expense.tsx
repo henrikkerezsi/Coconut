@@ -9,13 +9,13 @@ import {
   Divider,
   HelperText,
   SegmentedButtons,
-  Snackbar,
   Text as PaperText,
   TextInput as PaperTextInput,
 } from 'react-native-paper';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import dayjs from 'dayjs';
 import type { User } from '@supabase/supabase-js';
+import { ScreenToast } from '../../components/screen-toast';
 import type {
   SharedExpenseWithSplits,
   SharedPeriod,
@@ -338,9 +338,7 @@ export default function SharedExpenseScreen() {
         {editable ? 'Save expense' : 'Period closed'}
       </Button>
 
-      <Snackbar visible={toast !== null} onDismiss={() => setToast(null)} duration={2500}>
-        {toast}
-      </Snackbar>
+      <ScreenToast visible={toast !== null} message={toast} onDismiss={() => setToast(null)} />
     </ScrollView>
   );
 }

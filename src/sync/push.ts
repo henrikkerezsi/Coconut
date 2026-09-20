@@ -68,6 +68,9 @@ async function buildEntries(
     }
     for (const entry of entries) {
       const list = seeded.get(entry.table_name) ?? [];
+      if (list.some((e) => e.row_key === entry.row_key)) {
+        continue;
+      }
       list.push(entry);
       seeded.set(entry.table_name, list);
     }
@@ -157,18 +160,24 @@ async function remoteUpdatedAtOf(
   rowKey: string
 ): Promise<string | null> {
   if (adapter.identityColumn === 'month_key') {
-    const { data } = await client
+    const { data, error } = await client
       .from(adapter.remoteTable)
       .select('month_key, updated_at')
       .eq('month_key', rowKey)
       .maybeSingle();
+    if (error) {
+      throw new Error(`Lookup failed for ${adapter.remoteTable}: ${error.message}`);
+    }
     return data ? (data.updated_at as string | null) : null;
   }
-  const { data } = await client
+  const { data, error } = await client
     .from(adapter.remoteTable)
     .select('uuid, updated_at')
     .eq('uuid', rowKey)
     .maybeSingle();
+  if (error) {
+    throw new Error(`Lookup failed for ${adapter.remoteTable}: ${error.message}`);
+  }
   return data ? (data.updated_at as string | null) : null;
 }
 
@@ -188,7 +197,7 @@ async function pushRow(
 
   const remoteUpdatedAt = await remoteUpdatedAtOf(client, adapter, entry.row_key);
   const localUpdatedAt = (localRow.updated_at as string | null) ?? null;
-  if (remoteUpdatedAt && !isRemoteNewer(localUpdatedAt, remoteUpdatedAt)) {
+  if (remoteUpdatedAt && isRemoteNewer(localUpdatedAt, remoteUpdatedAt)) {
     await pruneOutbox(db, entry.table_name, entry.row_key);
     return;
   }
@@ -203,7 +212,10 @@ async function pushRow(
   const table = client.from(adapter.remoteTable);
   const onConflict =
     adapter.identityColumn === 'month_key' ? 'user_id,month_key' : 'uuid';
-  await table.upsert(payload, { onConflict });
+  const { error } = await table.upsert(payload, { onConflict });
+  if (error) {
+    throw new Error(`Push failed for ${adapter.remoteTable}: ${error.message}`);
+  }
   await pruneOutbox(db, entry.table_name, entry.row_key);
 }
 
@@ -214,9 +226,15 @@ async function deleteRemoteRow(
 ): Promise<void> {
   const query = client.from(adapter.remoteTable).delete();
   if (adapter.identityColumn === 'month_key') {
-    await query.eq('month_key', rowKey);
+    const { error } = await query.eq('month_key', rowKey);
+    if (error) {
+      throw new Error(`Delete failed for ${adapter.remoteTable}: ${error.message}`);
+    }
   } else {
-    await query.eq('uuid', rowKey);
+    const { error } = await query.eq('uuid', rowKey);
+    if (error) {
+      throw new Error(`Delete failed for ${adapter.remoteTable}: ${error.message}`);
+    }
   }
 }
 
@@ -246,7 +264,7 @@ async function pushTombstones(
       continue;
     }
     await deleteRemoteRow(client, adapter, tombstone.row_key);
-    await client.from('sync_tombstones').upsert(
+    const { error: tombstoneError } = await client.from('sync_tombstones').upsert(
       {
         user_id: userId,
         table_name: tombstone.table_name,
@@ -255,6 +273,9 @@ async function pushTombstones(
       },
       { onConflict: 'user_id,table_name,row_key' }
     );
+    if (tombstoneError) {
+      throw new Error(`Tombstone push failed: ${tombstoneError.message}`);
+    }
     await db.runAsync(
       'DELETE FROM sync_tombstones WHERE table_name = ? AND row_key = ?',
       [tombstone.table_name, tombstone.row_key]
@@ -292,7 +313,7 @@ async function pushSettings(
       throw new Error(`Settings push failed for ${key}: ${fetchError.message}`);
     }
     const localUpdatedAt = local.updated_at ?? new Date().toISOString();
-    if (data && !isRemoteNewer(localUpdatedAt, data.updated_at as string | null)) {
+    if (data && isRemoteNewer(localUpdatedAt, data.updated_at as string | null)) {
       continue;
     }
     const { error: upsertError } = await client.from('settings').upsert(

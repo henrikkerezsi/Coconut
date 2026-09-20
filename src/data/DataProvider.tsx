@@ -249,6 +249,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     enabled: false,
     lastSyncAt: null,
     lastSyncStatus: null,
+    lastSyncError: null,
   });
   const [currentMonth, setCurrentMonth] = useState<Month | null>(null);
   const [currentDashboard, setCurrentDashboard] = useState<MonthDashboard | null>(null);

@@ -8,6 +8,7 @@ export const DEFAULT_SYNC_STATE: SyncState = {
   enabled: false,
   lastSyncAt: null,
   lastSyncStatus: null,
+  lastSyncError: null,
 };
 
 interface SyncStateRow {
@@ -16,6 +17,7 @@ interface SyncStateRow {
   enabled: number;
   last_sync_at: string | null;
   last_sync_status: SyncStatus | null;
+  last_sync_error: string | null;
 }
 
 function isSyncStatus(value: string | null): value is SyncStatus {
@@ -29,13 +31,14 @@ function rowToSyncState(row: SyncStateRow): SyncState {
     enabled: row.enabled === 1,
     lastSyncAt: row.last_sync_at,
     lastSyncStatus: isSyncStatus(row.last_sync_status) ? row.last_sync_status : null,
+    lastSyncError: row.last_sync_error,
   };
 }
 
 export async function getSyncState(db?: SQLiteDatabase): Promise<SyncState> {
   const database = db ?? (await getDatabase());
   const row = await database.getFirstAsync<SyncStateRow>(
-    'SELECT supabase_url, api_key, enabled, last_sync_at, last_sync_status FROM sync_state WHERE id = 1'
+    'SELECT supabase_url, api_key, enabled, last_sync_at, last_sync_status, last_sync_error FROM sync_state WHERE id = 1'
   );
   if (!row) {
     return { ...DEFAULT_SYNC_STATE };
@@ -51,20 +54,22 @@ export async function updateSyncState(
   const current = await getSyncState(database);
   const next: SyncState = { ...current, ...patch };
   await database.runAsync(
-    `INSERT INTO sync_state (id, supabase_url, api_key, enabled, last_sync_at, last_sync_status)
-     VALUES (1, ?, ?, ?, ?, ?)
+    `INSERT INTO sync_state (id, supabase_url, api_key, enabled, last_sync_at, last_sync_status, last_sync_error)
+     VALUES (1, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (id) DO UPDATE SET
        supabase_url = excluded.supabase_url,
        api_key = excluded.api_key,
        enabled = excluded.enabled,
        last_sync_at = excluded.last_sync_at,
-       last_sync_status = excluded.last_sync_status`,
+       last_sync_status = excluded.last_sync_status,
+       last_sync_error = excluded.last_sync_error`,
     [
       next.supabaseUrl,
       next.apiKey,
       next.enabled ? 1 : 0,
       next.lastSyncAt,
       next.lastSyncStatus,
+      next.lastSyncError,
     ]
   );
   return next;

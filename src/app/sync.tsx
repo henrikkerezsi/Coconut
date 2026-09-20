@@ -5,7 +5,6 @@ import {
   Card,
   HelperText,
   List,
-  Snackbar,
   Switch,
   Text as PaperText,
   TextInput as PaperTextInput,
@@ -15,6 +14,7 @@ import type { User } from '@supabase/supabase-js';
 import type { SyncStatus } from '../models';
 import { useAppData } from '../data/DataProvider';
 import { LoadingScreen } from '../components/loading-screen';
+import { ScreenToast } from '../components/screen-toast';
 import { useAppTheme } from '../theme';
 import { formatMaskedKey, isValidApiKey, normalizeSupabaseUrl } from '../services/sync-service';
 import {
@@ -228,6 +228,14 @@ export default function SyncScreen() {
                 : 'No sync has run yet'
             }
           />
+          {syncState.lastSyncError ? (
+            <List.Item
+              title="Last error"
+              description={syncState.lastSyncError}
+              descriptionNumberOfLines={6}
+              left={(props) => <List.Icon {...props} icon="alert-circle-outline" />}
+            />
+          ) : null}
           <Button
             mode="contained"
             icon="sync"
@@ -431,9 +439,7 @@ export default function SyncScreen() {
         network requests are made.
       </PaperText>
 
-      <Snackbar visible={toast !== null} onDismiss={() => setToast(null)} duration={2500}>
-        {toast}
-      </Snackbar>
+      <ScreenToast visible={toast !== null} message={toast} onDismiss={() => setToast(null)} />
     </ScrollView>
   );
 }

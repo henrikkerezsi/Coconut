@@ -43,7 +43,7 @@ export async function syncNow(db?: SQLiteDatabase): Promise<SyncOutcome | null> 
       const client = await getClient();
       // Always re-sync the whole local database so rows that existed before
       // change-capture triggers were installed still get uploaded.
-      const sharedPushed = await pushSharedChanges(client, database);
+      const sharedPushed = await pushSharedChanges(client, database, user.id);
       const sharedPulled = await pullSharedChanges(client, database);
       await reconcileSharedTransactions(user.id, database);
       const pushResult = await pushChanges(client, database, true);
@@ -52,6 +52,7 @@ export async function syncNow(db?: SQLiteDatabase): Promise<SyncOutcome | null> 
       await updateSyncState({
         lastSyncAt: nowIso(),
         lastSyncStatus: 'success',
+        lastSyncError: null,
       });
       return { pushed: pushResult, pulled: pullResult, sharedPushed, sharedPulled };
     } catch (error) {
@@ -59,7 +60,7 @@ export async function syncNow(db?: SQLiteDatabase): Promise<SyncOutcome | null> 
         return null;
       }
       const message = error instanceof Error ? error.message : 'Unknown sync error';
-      await updateSyncState({ lastSyncStatus: 'error' });
+      await updateSyncState({ lastSyncStatus: 'error', lastSyncError: message });
       throw new SyncError(message);
     }
   })();

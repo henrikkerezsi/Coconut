@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
-import { Button, Card, List, Portal, Snackbar, Text as PaperText } from 'react-native-paper';
+import { Button, Card, List, Portal, Text as PaperText } from 'react-native-paper';
 import { useAppData } from '../../data/DataProvider';
 import { LoadingScreen } from '../../components/loading-screen';
 import { shareBackup, pickBackupFile, restoreFromBackup } from '../../utils/backup';
 import { AppDialog } from '../../components/app-dialog';
+import { ScreenToast } from '../../components/screen-toast';
 
 export default function BackupScreen() {
   const { ready, refresh } = useAppData();
@@ -125,9 +126,7 @@ export default function BackupScreen() {
         style={styles.tip}
       />
 
-      <Snackbar visible={toast !== null} onDismiss={() => setToast(null)} duration={2500}>
-        {toast}
-      </Snackbar>
+      <ScreenToast visible={toast !== null} message={toast} onDismiss={() => setToast(null)} />
     </ScrollView>
   );
 }

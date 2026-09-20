@@ -91,7 +91,7 @@ class FakeQuery {
     return Promise.resolve({ data: data[0] ?? null, error: null });
   }
 
-  upsert(payload: PostgrestRow, _options: { onConflict: string }): Promise<{ error: null }> {
+  private persist(payload: PostgrestRow, method: 'insert' | 'upsert'): Promise<{ error: null }> {
     const columns = REMOTE_COLUMNS[this.table] ?? [];
     for (const key of Object.keys(payload)) {
       if (!columns.includes(key)) {
@@ -105,7 +105,17 @@ class FakeQuery {
     const table = this.client.tables.get(this.table);
     const key = String(payload.uuid ?? payload.row_key ?? payload.key);
     table?.set(key, payload);
+    const log = method === 'insert' ? this.client.insertLog : this.client.upsertLog;
+    log.push({ table: this.table, row: payload });
     return Promise.resolve({ error: null });
+  }
+
+  upsert(payload: PostgrestRow, _options: { onConflict: string }): Promise<{ error: null }> {
+    return this.persist(payload, 'upsert');
+  }
+
+  insert(payload: PostgrestRow): Promise<{ error: null }> {
+    return this.persist(payload, 'insert');
   }
 
   then(
@@ -118,6 +128,8 @@ class FakeQuery {
 
 class FakeClient {
   readonly tables = new Map<string, Map<string, PostgrestRow>>();
+  readonly upsertLog: Array<{ table: string; row: PostgrestRow }> = [];
+  readonly insertLog: Array<{ table: string; row: PostgrestRow }> = [];
 
   constructor() {
     for (const table of Object.keys(REMOTE_COLUMNS)) {
@@ -300,7 +312,7 @@ describe('pushSharedChanges', () => {
     seedSharedSpace(raw);
     const client = new FakeClient();
 
-    await pushSharedChanges(client as never, makeDbApi(raw) as never);
+    await pushSharedChanges(client as never, makeDbApi(raw) as never, 'user-1');
 
     const localSpaceUuid = (raw.prepare('SELECT uuid FROM shared_spaces').get() as { uuid: string })
       .uuid;
@@ -322,6 +334,9 @@ describe('pushSharedChanges', () => {
     expect(client.rows('shared_expenses')).toHaveLength(1);
     expect(client.rows('shared_expense_splits')).toHaveLength(2);
 
+    const remoteSpace = client.rows('shared_spaces')[0];
+    expect(remoteSpace.owner_user_id).toBe('user-1');
+
     const remoteMember = client
       .rows('shared_space_members')
       .find((row) => row.uuid === localMemberUuid) as PostgrestRow;
@@ -338,21 +353,70 @@ describe('pushSharedChanges', () => {
     expect(count(raw, 'sync_outbox')).toBe(0);
   });
 
+  it('claims a space with no local owner on behalf of the pushing user', async () => {
+    const raw = freshDb();
+    raw.exec(`INSERT INTO shared_spaces (name, owner_user_id) VALUES ('Home', NULL)`);
+    const client = new FakeClient();
+
+    await pushSharedChanges(client as never, makeDbApi(raw) as never, 'user-9');
+
+    const remoteSpace = client.rows('shared_spaces')[0];
+    expect(remoteSpace).toBeDefined();
+    expect(remoteSpace.owner_user_id).toBe('user-9');
+  });
+
+  it('never sends an owner when pushing an existing remote space (member device)', async () => {
+    const raw = freshDb();
+    const client = new FakeClient();
+    seedRemote(client);
+    await pullSharedChanges(client as never, makeDbApi(raw) as never);
+    expect(count(raw, 'shared_spaces')).toBe(1);
+    raw.exec(`UPDATE shared_spaces SET name = 'Home Renamed'`);
+
+    await pushSharedChanges(client as never, makeDbApi(raw) as never, 'user-2');
+
+    const spacePayload = client.upsertLog.find(
+      (entry) => entry.table === 'shared_spaces'
+    )?.row;
+    expect(spacePayload).toBeDefined();
+    expect(spacePayload?.owner_user_id).toBeUndefined();
+  });
+
   it('propagates a deleted expense as a remote tombstone', async () => {
     const raw = freshDb();
     const fixture = seedSharedSpace(raw);
     const client = new FakeClient();
-    await pushSharedChanges(client as never, makeDbApi(raw) as never);
+    await pushSharedChanges(client as never, makeDbApi(raw) as never, 'user-1');
     expect(client.rows('shared_expenses')).toHaveLength(1);
 
     raw.exec(`DELETE FROM shared_expenses WHERE id = ${fixture.expenseId}`);
-    await pushSharedChanges(client as never, makeDbApi(raw) as never);
+    await pushSharedChanges(client as never, makeDbApi(raw) as never, 'user-1');
 
     expect(client.rows('shared_expenses')).toHaveLength(0);
     expect(client.rows('shared_expense_splits')).toHaveLength(0);
     const tombstones = client.rows('shared_sync_tombstones');
     expect(tombstones.map((row) => row.table_name)).toContain('shared_expenses');
     expect(count(raw, 'shared_sync_tombstones')).toBe(0);
+  });
+
+  it('inserts brand-new rows instead of upserting them so first-time shared rows pass RLS', async () => {
+    const raw = freshDb();
+    seedSharedSpace(raw);
+    const client = new FakeClient();
+
+    await pushSharedChanges(client as never, makeDbApi(raw) as never, 'user-1');
+
+    expect(client.insertLog).toHaveLength(7);
+    expect(client.upsertLog).toHaveLength(0);
+    const spaceInsert = client.insertLog.find((entry) => entry.table === 'shared_spaces');
+    expect(spaceInsert?.row.owner_user_id).toBe('user-1');
+
+    raw.exec(`UPDATE shared_spaces SET name = 'Home renamed'`);
+    await pushSharedChanges(client as never, makeDbApi(raw) as never, 'user-1');
+
+    expect(client.upsertLog).toHaveLength(7);
+    expect(client.upsertLog.find((entry) => entry.table === 'shared_spaces')?.row.owner_user_id).toBeUndefined();
+    expect(client.insertLog).toHaveLength(7);
   });
 });
 
@@ -364,10 +428,9 @@ describe('pullSharedChanges', () => {
 
     await pullSharedChanges(client as never, makeDbApi(raw) as never);
 
-    const space = raw.prepare('SELECT id, uuid FROM shared_spaces').get() as {
-      id: number;
-      uuid: string;
-    };
+    const space = raw
+      .prepare('SELECT id, uuid, owner_user_id FROM shared_spaces')
+      .get() as { id: number; uuid: string; owner_user_id: string | null };
     const member = raw
       .prepare('SELECT id, uuid, space_id FROM shared_space_members ORDER BY id LIMIT 1')
       .get() as { id: number; uuid: string; space_id: number };
@@ -391,6 +454,7 @@ describe('pullSharedChanges', () => {
       .get() as { uuid: string; expense_id: number; member_id: number };
 
     expect(space.uuid).toBe('space-1');
+    expect(space.owner_user_id).toBe('user-1');
     expect(member.uuid).toBe('member-1');
     expect(period.uuid).toBe('period-1');
     expect(expense.uuid).toBe('expense-1');

@@ -128,6 +128,7 @@ const REMOTE_COLUMNS: Record<string, string[]> = {
 class FakeClient {
   readonly tables = new Map<string, Map<string, PostgrestRow>>();
   readonly upsertLog: Array<{ table: string; row: PostgrestRow }> = [];
+  readonly failTables = new Set<string>();
 
   constructor() {
     for (const table of Object.keys(REMOTE_COLUMNS)) {
@@ -172,15 +173,21 @@ class FakeBuilder {
     return Promise.resolve({ data: null });
   }
 
-  upsert(payload: PostgrestRow, _options: { onConflict: string }): Promise<{ error: null }> {
+  upsert(
+    payload: PostgrestRow,
+    _options: { onConflict: string }
+  ): Promise<{ error: Error | null }> {
+    if (this.fakeClient.failTables.has(this.tableName)) {
+      return Promise.resolve({ error: new Error(`test failure for ${this.tableName}`) });
+    }
     const columns = REMOTE_COLUMNS[this.tableName] ?? [];
     for (const key of Object.keys(payload)) {
       if (!columns.includes(key)) {
-        return Promise.reject(
-          new Error(
+        return Promise.resolve({
+          error: new Error(
             `PGRST204: Could not find the '${key}' column of '${this.tableName}' in the schema cache`
-          )
-        );
+          ),
+        });
       }
     }
     const table = this.fakeClient.tables.get(this.tableName);
@@ -259,7 +266,7 @@ function insertTransaction(
 }
 
 function insertWithSuppressedTriggers(db: DatabaseSync, sql: string): void {
-  db.exec(`INSERT INTO sync_meta (key, value) VALUES ('pull_in_progress', '1')`);
+  db.exec(`INSERT OR REPLACE INTO sync_meta (key, value) VALUES ('pull_in_progress', '1')`);
   db.exec(sql);
   db.exec(`UPDATE sync_meta SET value = '0' WHERE key = 'pull_in_progress'`);
 }
@@ -299,6 +306,69 @@ describe('pushChanges full-sync seeding and healing', () => {
     expect(remote).toBeDefined();
     expect(remote?.uuid).toBe(healed.uuid);
     expect(remote?.name).toBe('Groceries');
+  });
+
+  it('pushes a local edit when the local row is newer than the remote copy', async () => {
+    const db = freshDb();
+    insertMonth(db, '2026-09');
+    insertWithSuppressedTriggers(
+      db,
+      `INSERT INTO transactions (month_key, date, amount_cents, merchant)
+       VALUES ('2026-09', '2026-09-18', 1200, 'Old')`
+    );
+    insertWithSuppressedTriggers(
+      db,
+      `UPDATE transactions SET uuid = 'tx-1', updated_at = '2026-09-18T00:00:00.000Z', merchant = 'New'
+       WHERE id = 1`
+    );
+    const client = new FakeClient();
+    client.tables.get('transactions')!.set('tx-1', {
+      uuid: 'tx-1',
+      updated_at: '2026-09-10T00:00:00.000Z',
+      user_id: 'user-1',
+      merchant: 'Old',
+    });
+
+    await pushAll(db, client);
+
+    const remote = client.tables.get('transactions')?.get('tx-1');
+    expect(remote?.merchant).toBe('New');
+    const logged = client.upsertLog.find(
+      (entry) => entry.table === 'transactions' && entry.row.uuid === 'tx-1'
+    );
+    expect(logged).toBeDefined();
+  });
+
+  it('skips and prunes a row whose remote copy is strictly newer', async () => {
+    const db = freshDb();
+    insertMonth(db, '2026-09');
+    insertWithSuppressedTriggers(
+      db,
+      `INSERT INTO transactions (month_key, date, amount_cents, merchant)
+       VALUES ('2026-09', '2026-09-18', 1200, 'Local')`
+    );
+    insertWithSuppressedTriggers(
+      db,
+      `UPDATE transactions SET uuid = 'tx-1', updated_at = '2026-09-10T00:00:00.000Z'
+       WHERE id = 1`
+    );
+    const client = new FakeClient();
+    client.tables.get('transactions')!.set('tx-1', {
+      uuid: 'tx-1',
+      updated_at: '2026-09-18T00:00:00.000Z',
+      user_id: 'user-1',
+      merchant: 'RemoteNew',
+    });
+
+    await pushAll(db, client);
+
+    const remote = client.tables.get('transactions')?.get('tx-1');
+    expect(remote?.merchant).toBe('RemoteNew');
+    expect(
+      client.upsertLog.find(
+        (entry) => entry.table === 'transactions' && entry.row.uuid === 'tx-1'
+      )
+    ).toBeUndefined();
   });
 
   it('uploads budgets before tagged transactions so the remote FK is satisfied', async () => {    const db = freshDb();
@@ -379,5 +449,44 @@ describe('pushChanges full-sync seeding and healing', () => {
     ]) {
       expect(client.tables.get(table)?.size ?? 0).toBeGreaterThan(0);
     }
+  });
+
+  it('surfaces a remote upsert error instead of swallowing it', async () => {
+    const db = freshDb();
+    insertMonth(db, '2026-09');
+    insertTransaction(db, 3450, null);
+
+    const client = new FakeClient();
+    client.failTables.add('transactions');
+    await expect(pushAll(db, client)).rejects.toThrow(/Push failed for transactions/);
+  });
+
+  it('keeps the local row and outbox when a push fails so it is retried later', async () => {
+    const db = freshDb();
+    insertMonth(db, '2026-09');
+    insertTransaction(db, 3450, null);
+
+    const failingClient = new FakeClient();
+    failingClient.failTables.add('transactions');
+    await expect(pushAll(db, failingClient)).rejects.toThrow();
+
+    const outbox = db
+      .prepare('SELECT table_name, row_key FROM sync_outbox WHERE table_name = ?')
+      .all('transactions') as Array<{ table_name: string; row_key: string }>;
+    expect(outbox.length).toBe(1);
+
+    const row = db
+      .prepare('SELECT uuid FROM transactions WHERE rowid = 1')
+      .get() as { uuid: string };
+    expect(outbox[0].row_key).toBe(row.uuid);
+
+    const healthyClient = new FakeClient();
+    await pushAll(db, healthyClient);
+    expect(healthyClient.tables.get('transactions')?.size ?? 0).toBe(1);
+    expect(
+      db.prepare('SELECT COUNT(*) AS n FROM sync_outbox WHERE table_name = ?').get('transactions') as {
+        n: number;
+      }
+    ).toMatchObject({ n: 0 });
   });
 });

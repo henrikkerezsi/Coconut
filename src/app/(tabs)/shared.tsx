@@ -9,7 +9,6 @@ import {
   List,
   Portal,
   Searchbar,
-  Snackbar,
   Text,
   TextInput as PaperTextInput,
 } from 'react-native-paper';
@@ -28,6 +27,7 @@ import { formatCents } from '../../utils/currency';
 import { DAYJS_STORE_DATE_FORMAT, relativeDayLabel } from '../../utils/date';
 import { sharedMemberName } from '../../utils/shared-members';
 import { getSupabaseSessionUser } from '../../sync/supabase';
+import { ScreenToast } from '../../components/screen-toast';
 import { getSelectedSpaceUuid, setSelectedSpaceUuid } from '../../database/localPreferences';
 import {
   acceptInvite,
@@ -570,9 +570,7 @@ export default function SharedScreen() {
         </AppDialog>
       </Portal>
 
-      <Snackbar visible={toast !== null} onDismiss={() => setToast(null)} duration={2500}>
-        {toast}
-      </Snackbar>
+      <ScreenToast visible={toast !== null} message={toast} onDismiss={() => setToast(null)} />
     </ScreenFade>
   );
 }

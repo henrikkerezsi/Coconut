@@ -23,6 +23,7 @@ export interface SyncState {
   enabled: boolean;
   lastSyncAt: string | null;
   lastSyncStatus: SyncStatus | null;
+  lastSyncError: string | null;
 }
 
 export interface Month {

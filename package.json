@@ -7,6 +7,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "reset-password": "node scripts/reset-password.mjs",
     "test": "jest",
     "typecheck": "tsc --noEmit",
     "lint": "expo lint"

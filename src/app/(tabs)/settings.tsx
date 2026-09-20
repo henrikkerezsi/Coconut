@@ -1,13 +1,17 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { List, Portal, Text } from 'react-native-paper';
+import { List, Portal, Switch, Text } from 'react-native-paper';
 import { useAppData } from '../../data/DataProvider';
 import { formatCents } from '../../utils/currency';
 import { AmountInput } from '../../components/amount-input';
 import { LoadingScreen } from '../../components/loading-screen';
 import { useAppTheme } from '../../theme';
 import { AppDialog } from '../../components/app-dialog';
+import {
+  getCheckForUpdatesOnStart,
+  setCheckForUpdatesOnStart,
+} from '../../database/updatePrefs';
 
 const THEME_OPTIONS: { value: 'light' | 'dark' | 'system'; label: string }[] = [
   { value: 'system', label: 'System' },
@@ -33,6 +37,19 @@ export default function SettingsScreen() {
   const [allowanceError, setAllowanceError] = useState<string | null>(null);
   const [appearanceDialog, setAppearanceDialog] = useState(false);
   const [recentCountDialog, setRecentCountDialog] = useState(false);
+  const [checkUpdatesEnabled, setCheckUpdatesEnabled] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    getCheckForUpdatesOnStart().then((enabled) => {
+      if (active) {
+        setCheckUpdatesEnabled(enabled);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   if (!ready) {
     return <LoadingScreen />;
@@ -124,6 +141,20 @@ export default function SettingsScreen() {
 
       <List.Section>
         <List.Subheader>About</List.Subheader>
+        <List.Item
+          title="Check for updates"
+          description="Notify when a newer version is available (requires internet)"
+          left={(props) => <List.Icon {...props} icon="update" />}
+          right={() => (
+            <Switch
+              value={checkUpdatesEnabled}
+              onValueChange={(value) => {
+                setCheckUpdatesEnabled(value);
+                void setCheckForUpdatesOnStart(value);
+              }}
+            />
+          )}
+        />
         <List.Item
           title="Welcome tour"
           description="Replay the getting-started walkthrough"

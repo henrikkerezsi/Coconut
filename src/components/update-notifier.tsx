@@ -3,6 +3,7 @@ import { Alert, Linking } from 'react-native';
 import { releaseInfo } from '../config/release-info';
 import { checkForUpdate, type ReleaseInfo } from '../services/update-service';
 import {
+  getCheckForUpdatesOnStart,
   getIgnoredReleaseVersion,
   setIgnoredReleaseVersion,
 } from '../database/updatePrefs';
@@ -16,6 +17,10 @@ export function UpdateNotifier() {
     let active = true;
     void (async () => {
       try {
+        const enabled = await getCheckForUpdatesOnStart();
+        if (!enabled) {
+          return;
+        }
         const ignored = await getIgnoredReleaseVersion();
         const result = await checkForUpdate(releaseInfo.version, ignored);
         if (active && result) {

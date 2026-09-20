@@ -48,7 +48,7 @@ export const tutorialPages: TutorialPage[] = [
     title: 'Optional Cloud Sync',
     body: 'The app is fully private and offline by default — nothing ever leaves this device. If ' +
       'you want, you can point Coconut at your own Supabase project to keep your data in sync ' +
-      'across devices)Skip your backend, and it stays completely optional: off keeps being' +
+      'across devices. Skip your backend, and it stays completely optional: off keeps being ' +
       'fully offline with zero network use. You can skip this entirely.',
   },
   {

@@ -65,7 +65,7 @@ export async function getAllTransfers(db?: SQLiteDatabase): Promise<ReserveTrans
 
 export async function upsertMerchantSuggestion(
   merchant: string,
-  budgetId: number,
+  budgetId: number | null,
   db?: SQLiteDatabase
 ): Promise<void> {
   if (budgetId === null || budgetId === undefined) {

@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Card, List, ProgressBar, Text } from 'react-native-paper';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useAppData } from '../../data/DataProvider';
 import type { ClosedMonthRecord, CategoryPerformance } from '../../database/queries';
 import {
@@ -31,14 +31,16 @@ export default function StatisticsScreen() {
     new Map()
   );
 
-  useEffect(() => {
-    if (!ready) {
-      return;
-    }
-    getClosedMonthRecords().then(setRecords);
-    getCategoryPerformance().then(setCategories);
-    getAllTimeSpendingByCategory().then(setAllTimeByCategory);
-  }, [ready]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!ready) {
+        return;
+      }
+      getClosedMonthRecords().then(setRecords);
+      getCategoryPerformance().then(setCategories);
+      getAllTimeSpendingByCategory().then(setAllTimeByCategory);
+    }, [ready])
+  );
 
   if (!ready) {
     return <LoadingScreen />;
@@ -73,11 +75,13 @@ export default function StatisticsScreen() {
           sub={
             averageAdjustment !== null
               ? averageAdjustment < 0
-                ? 'Months saved on average'
-                : 'Months draw on the reserve on average'
+                ? 'Months draw on the reserve on average'
+                : averageAdjustment > 0
+                  ? 'Months saved on average'
+                  : 'No net shift in the reserve'
               : null
           }
-          tone={averageAdjustment !== null && averageAdjustment <= 0 ? 'good' : 'bad'}
+          tone={averageAdjustment !== null && averageAdjustment > 0 ? 'good' : averageAdjustment !== null && averageAdjustment < 0 ? 'bad' : 'neutral'}
         />
       </View>
 

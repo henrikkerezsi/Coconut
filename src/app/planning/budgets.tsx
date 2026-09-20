@@ -142,7 +142,7 @@ export default function BudgetsScreen() {
             <AppDialog.Title>Delete budget?</AppDialog.Title>
             <AppDialog.Content>
               <PaperText variant="bodyMedium">
-                Transactions already tagged with this budget keep their tags. Past months keep their records.
+                Transactions already tagged with this budget keep their tags. This removes the current month&apos;s planned amount too. Past months keep their records.
               </PaperText>
             </AppDialog.Content>
             <AppDialog.Actions>

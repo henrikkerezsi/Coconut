@@ -52,6 +52,7 @@ import {
 import {
   createTransaction,
   deleteTransaction as deleteTransactionRow,
+  getTransaction,
   getRecentTransactions,
   updateTransaction as updateTransactionRow,
   type TransactionInput,
@@ -404,17 +405,25 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       addTransaction: async (input) => {
         const db = await getDatabase();
         await createTransaction(input, db);
-        await upsertMerchantSuggestion(input.merchant, input.budgetId ?? 0, db);
+        await upsertMerchantSuggestion(input.merchant, input.budgetId, db);
         await refresh();
       },
       saveTransaction: async (id, input) => {
         const db = await getDatabase();
+        const existing = await getTransaction(id, db);
+        if (existing?.originType === 'shared') {
+          return;
+        }
         await updateTransactionRow(id, input, db);
-        await upsertMerchantSuggestion(input.merchant, input.budgetId ?? 0, db);
+        await upsertMerchantSuggestion(input.merchant, input.budgetId, db);
         await refresh();
       },
       removeTransaction: async (id) => {
         const db = await getDatabase();
+        const existing = await getTransaction(id, db);
+        if (existing?.originType === 'shared') {
+          return;
+        }
         await deleteTransactionRow(id, db);
         await refresh();
       },

@@ -33,7 +33,7 @@ export function highestMonthlySpending(months: { spendingCents: number }[]): num
   return months.reduce((max, month) => Math.max(max, month.spendingCents), -Infinity);
 }
 
-/** Average reserve adjustment (negative means months saved on average). */
+/** Average reserve adjustment (positive means saved on average, negative drawn). */
 export function averageReserveAdjustment(
   months: { reserveAdjustmentCents: number }[]
 ): number | null {

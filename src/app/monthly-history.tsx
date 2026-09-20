@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Card, List, Text } from 'react-native-paper';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 
 import { useAppData } from '../data/DataProvider';
 import type { ClosedMonthRecord } from '../database/queries';
@@ -17,12 +17,14 @@ export default function MonthlyHistoryScreen() {
   const router = useRouter();
   const [records, setRecords] = useState<ClosedMonthRecord[]>([]);
 
-  useEffect(() => {
-    if (!ready) {
-      return;
-    }
-    getClosedMonthRecords().then(setRecords);
-  }, [ready]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!ready) {
+        return;
+      }
+      getClosedMonthRecords().then(setRecords);
+    }, [ready])
+  );
 
   if (!ready) {
     return <LoadingScreen />;

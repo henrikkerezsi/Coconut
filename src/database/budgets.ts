@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { Budget, MonthBudget, MonthKey } from '../models';
 import { getDatabase } from './database';
+import { currentMonthKey } from '../utils/date';
 
 interface BudgetRow {
   id: number;
@@ -71,7 +72,15 @@ export async function updateBudget(
 
 export async function deleteBudget(id: number, db?: SQLiteDatabase): Promise<void> {
   const database = db ?? (await getDatabase());
-  await database.runAsync('DELETE FROM budgets WHERE id = ?', [id]);
+  await database.withTransactionAsync(async () => {
+    // Remove only the current month's allocation together with the definition.
+    // Past months keep their recorded plans.
+    await database.runAsync(
+      'DELETE FROM month_budgets WHERE budget_id = ? AND month_key = ?',
+      [id, currentMonthKey()]
+    );
+    await database.runAsync('DELETE FROM budgets WHERE id = ?', [id]);
+  });
 }
 
 interface MonthBudgetRow {

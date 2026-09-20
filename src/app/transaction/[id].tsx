@@ -79,7 +79,7 @@ export default function EditTransactionScreen() {
               </Text>
             </View>
             <Text variant="bodySmall" style={styles.traceHint}>
-              Your share is the amount of this transaction and is derived from the shared expense.
+              This transaction is derived from the shared expense and cannot be edited here.
             </Text>
             <Button mode="outlined" icon="open-in-new" onPress={openSharedExpense} style={styles.traceButton}>
               Open shared expense
@@ -87,25 +87,47 @@ export default function EditTransactionScreen() {
           </Card.Content>
         </Card>
       ) : null}
-      <TransactionForm
-        initial={transaction}
-        budgets={budgets}
-        symbol={settings.currencySymbol}
-        suggestMerchant={suggestBudgets}
-        onSubmit={async (input) => {
-          await saveTransaction(transaction.id, input);
-          router.back();
-        }}
-      />
-      <View style={styles.deleteRow}>
-        <Button
-          mode="text"
-          textColor={theme.semantic.delete}
-          onPress={() => setConfirmDelete(true)}
-        >
-          Delete transaction
-        </Button>
-      </View>
+      {transaction.originType === 'shared' ? (
+        <View>
+          <List.Item
+            title={transaction.merchant}
+            description="Merchant"
+            left={(props) => <List.Icon {...props} icon="cash" />}
+          />
+          <List.Item
+            title={formatCents(transaction.amountCents, settings.currencySymbol)}
+            description="Amount"
+            left={(props) => <List.Icon {...props} icon="currency-eur" />}
+          />
+          <List.Item
+            title={transaction.date}
+            description="Date"
+            left={(props) => <List.Icon {...props} icon="calendar-outline" />}
+          />
+        </View>
+      ) : (
+        <>
+          <TransactionForm
+            initial={transaction}
+            budgets={budgets}
+            symbol={settings.currencySymbol}
+            suggestMerchant={suggestBudgets}
+            onSubmit={async (input) => {
+              await saveTransaction(transaction.id, input);
+              router.back();
+            }}
+          />
+          <View style={styles.deleteRow}>
+            <Button
+              mode="text"
+              textColor={theme.semantic.delete}
+              onPress={() => setConfirmDelete(true)}
+            >
+              Delete transaction
+            </Button>
+          </View>
+        </>
+      )}
       <Portal>
         <AppDialog visible={confirmDelete} onDismiss={() => setConfirmDelete(false)}>
           <AppDialog.Title>Delete this transaction?</AppDialog.Title>

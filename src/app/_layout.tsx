@@ -35,11 +35,11 @@ function ThemedContent() {
           />
           <Stack.Screen
             name="income/new"
-            options={{ title: 'New Income', presentation: 'modal' }}
+            options={{ title: 'New One-off Income', presentation: 'modal' }}
           />
           <Stack.Screen
             name="income/[id]"
-            options={{ title: 'Income', presentation: 'modal' }}
+            options={{ title: 'One-off Income', presentation: 'modal' }}
           />
           <Stack.Screen
             name="fixed-expense/new"

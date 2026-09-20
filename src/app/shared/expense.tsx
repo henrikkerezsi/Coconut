@@ -25,6 +25,7 @@ import type {
 } from '../../models';
 import { DateField } from '../../components/date-field';
 import { useAppData } from '../../data/DataProvider';
+import { useAppTheme } from '../../theme';
 import { formatCents, centsFromString } from '../../utils/currency';
 import { DAYJS_STORE_DATE_FORMAT } from '../../utils/date';
 import { getSupabaseSessionUser } from '../../sync/supabase';
@@ -57,6 +58,7 @@ export default function SharedExpenseScreen() {
   const editingId = params.id ? Number(params.id) : null;
   const router = useRouter();
   const { refresh, settings } = useAppData();
+  const theme = useAppTheme();
 
   const [sessionUser, setSessionUser] = useState<User | null>(null);
   const [members, setMembers] = useState<SharedSpaceMember[]>([]);
@@ -256,6 +258,9 @@ export default function SharedExpenseScreen() {
                 showSelectedCheck={false}
                 onPress={() => setPaidBy(member.id)}
                 disabled={!editable}
+                style={{
+                  backgroundColor: paidBy === member.id ? theme.colors.secondaryContainer : 'transparent',
+                }}
               >
                 {memberName(member)}
               </Chip>

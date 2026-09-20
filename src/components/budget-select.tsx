@@ -20,15 +20,15 @@ export function BudgetSelect({ budgets, selectedId, onSelect, symbol = '' }: Bud
   return (
     <>
       <List.Item
-        title={selected ? selected.name : 'No category'}
-        description={selected ? formatCents(selected.defaultAmountCents, symbol) : 'Transactions can exist without a category'}
+        title={selected ? selected.name : 'No budget'}
+        description={selected ? formatCents(selected.defaultAmountCents, symbol) : 'Transactions can exist without a budget'}
         left={(props) => <List.Icon {...props} icon="tag-outline" />}
         onPress={() => setVisible(true)}
       />
       <Portal>
         <Modal visible={visible} onDismiss={() => setVisible(false)} contentContainerStyle={[styles.modal, { backgroundColor: theme.colors.surface }]}>
           <Text variant="titleMedium" style={styles.title}>
-            Category
+            Budget
           </Text>
           <RadioButton.Group
             onValueChange={(value) => {
@@ -37,7 +37,7 @@ export function BudgetSelect({ budgets, selectedId, onSelect, symbol = '' }: Bud
             }}
             value={selectedId === null ? 'none' : String(selectedId)}
           >
-            <RadioButton.Item label="No category" value="none" />
+            <RadioButton.Item label="No budget" value="none" />
             {budgets.map((budget) => (
               <RadioButton.Item key={budget.id} label={budget.name} value={String(budget.id)} />
             ))}

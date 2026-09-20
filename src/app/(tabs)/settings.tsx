@@ -89,7 +89,7 @@ export default function SettingsScreen() {
         />
         <List.Item
           title="Flexible budgets"
-          description="Discretionary spending categories"
+          description="Discretionary spending budgets"
           left={(props) => <List.Icon {...props} icon="tag-multiple-outline" />}
           onPress={() => router.push('/planning/budgets')}
         />

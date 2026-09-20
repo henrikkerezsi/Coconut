@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { SQLiteDatabase, SQLiteBindValue } from 'expo-sqlite';
 
 import { withPullGuard } from '../database/syncMeta';
+import { consolidateOpenPeriods } from '../database/sharedPeriods';
 import { decoupleSharedTransactions } from '../database/sharedLinking';
 import { SHARED_ADAPTERS } from './shared-serialize';
 import { isRemoteNewer, nowIso } from './time';
@@ -364,6 +365,7 @@ export async function pushSharedChanges(
   userId: string
 ): Promise<SharedPushResult> {
   await backfillSharedRows(db);
+  await consolidateOpenPeriods(db);
   const maps = await loadPushFkMaps(db);
   const entriesByTable = await listPushEntries(db);
   let pushed = 0;
@@ -526,6 +528,9 @@ export async function pullSharedChanges(
     // when that member's own access is revoked: drop the local copy (and its
     // children) and decouple, never delete, the linked personal transactions.
     expired = await expireRemovedSpaces(db, remoteSpaceUuids);
+    // Merge any duplicate open periods a sync race left behind so every member
+    // lists the same single current period (and its expenses).
+    await consolidateOpenPeriods(db);
   });
   return { pulled, tombstones, expiredSpaces: expired };
 }

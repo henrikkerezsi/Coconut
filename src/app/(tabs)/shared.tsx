@@ -34,7 +34,7 @@ import {
   addPendingMember,
   createSharedSpace,
   deleteSharedSpace,
-  getAllSharedSpaces,
+  getMySharedSpaces,
   getPendingInvitesForEmail,
   getSharedSpace,
   getSpaceMembers,
@@ -107,7 +107,7 @@ export default function SharedScreen() {
       setLoading(false);
       return;
     }
-    const all = await getAllSharedSpaces();
+    const all = await getMySharedSpaces(user.id);
     setSpaces(all);
     setPending(user.email ? await getPendingInvitesForEmail(user.email) : []);
     const storedUuid = await getSelectedSpaceUuid();

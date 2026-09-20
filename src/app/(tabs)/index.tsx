@@ -77,7 +77,7 @@ export default function OverviewScreen() {
 
       <View style={styles.statRow}>
         <StatCard label="Allowance" value={forecast.allowanceCents} format={(v) => formatCents(v, symbol)} />
-        <StatCard label="Income" value={forecast.incomeTotalCents} format={(v) => formatCents(v, symbol)} tone="good" />
+        <StatCard label="One-off income" value={forecast.incomeTotalCents} format={(v) => formatCents(v, symbol)} tone="good" />
       </View>
       <View style={styles.statRow}>
         <StatCard label="Actual spent" value={forecast.actualSpendingCents} format={(v) => formatCents(v, symbol)} />
@@ -128,7 +128,7 @@ export default function OverviewScreen() {
             <Text variant="bodyMedium">{formatCents(forecast.plannedSpendingCents, symbol)}</Text>
           </View>
           <View style={styles.row}>
-            <Text variant="bodyMedium">Available (allowance + income)</Text>
+            <Text variant="bodyMedium">Available (allowance + one-off income)</Text>
             <Text variant="bodyMedium">{formatCents(forecast.availableCents, symbol)}</Text>
           </View>
           <Text variant="bodySmall" style={styles.hint}>
@@ -167,7 +167,7 @@ export default function OverviewScreen() {
 
       <Card mode="elevated" style={styles.card} contentStyle={styles.cardContent}>
         <Card.Title
-          title="Income"
+          title="One-off income"
           subtitle={`${formatCents(forecast.incomeTotalCents, symbol)} this month`}
           right={() => (
             <Button

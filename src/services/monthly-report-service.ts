@@ -126,7 +126,7 @@ export function reportBudgets(
   );
   if (uncategorizedCents > 0) {
     entries.push({
-      name: 'Uncategorized',
+      name: 'No budget',
       plannedCents: 0,
       spentCents: uncategorizedCents,
       remainingCents: -uncategorizedCents,

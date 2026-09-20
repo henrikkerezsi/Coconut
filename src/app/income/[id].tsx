@@ -46,7 +46,7 @@ export default function EditIncomeScreen() {
             removeIncome(income.id).then(() => router.back());
           }}
         >
-          Delete income
+          Delete one-off income
         </Button>
       </View>
     </ScrollView>

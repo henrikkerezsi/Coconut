@@ -95,6 +95,60 @@ export async function ensureOpenPeriod(
   return created;
 }
 
+/**
+ * Enforces the one-open-period-per-space invariant across synced copies.
+ *
+ * The invariant is normally maintained locally by `ensureOpenPeriod`, but two
+ * devices can each open a period before the other's has synced (a close/reopen
+ * race, or accepting an invite before the peer's period arrived). Both open
+ * periods then land in every copy, and `getOpenPeriod` arbitrarily shows only
+ * one of them while personal linked transactions still aggregate across both.
+ *
+ * This picks a deterministic winner per space (earliest start date, then
+ * smallest uuid so every device agrees), re-points the losers' expenses to the
+ * winner, and closes the losers with the winner's start date as end date. The
+ * changes flow through the normal change-capture triggers, so the merged state
+ * converges on the remote and on other members' devices.
+ */
+export async function consolidateOpenPeriods(db?: SQLiteDatabase): Promise<number> {
+  const database = db ?? (await getDatabase());
+  const spaces = await database.getAllAsync<{ id: number }>(
+    `SELECT space_id AS id FROM shared_periods
+      WHERE status = 'open'
+      GROUP BY space_id
+      HAVING COUNT(*) > 1`
+  );
+  let merged = 0;
+  for (const space of spaces) {
+    const open = await database.getAllAsync<{
+      id: number;
+      uuid: string | null;
+      start_date: string;
+    }>(
+      `SELECT id, uuid, start_date FROM shared_periods
+        WHERE space_id = ? AND status = 'open'
+        ORDER BY start_date ASC, uuid ASC, id ASC`,
+      [space.id]
+    );
+    const winner = open[0];
+    if (!winner) {
+      continue;
+    }
+    for (const loser of open.slice(1)) {
+      await database.runAsync('UPDATE shared_expenses SET period_id = ? WHERE period_id = ?', [
+        winner.id,
+        loser.id,
+      ]);
+      await database.runAsync(
+        `UPDATE shared_periods SET status = 'closed', end_date = ? WHERE id = ?`,
+        [winner.start_date, loser.id]
+      );
+      merged += 1;
+    }
+  }
+  return merged;
+}
+
 export async function closePeriod(
   periodId: number,
   endDate: string,

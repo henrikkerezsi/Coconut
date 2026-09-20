@@ -53,10 +53,17 @@ function rowToMember(row: SharedMemberRow): SharedSpaceMember {
   };
 }
 
-export async function getAllSharedSpaces(db?: SQLiteDatabase): Promise<SharedSpace[]> {
+export async function getMySharedSpaces(
+  userId: string,
+  db?: SQLiteDatabase
+): Promise<SharedSpace[]> {
   const database = db ?? (await getDatabase());
   const rows = await database.getAllAsync<SharedSpaceRow>(
-    'SELECT * FROM shared_spaces WHERE deleted = 0 ORDER BY created_at ASC, id ASC'
+    `SELECT s.* FROM shared_spaces s
+      JOIN shared_space_members m ON m.space_id = s.id
+      WHERE s.deleted = 0 AND m.user_id = ? AND m.status = 'active'
+      ORDER BY s.created_at ASC, s.id ASC`,
+    [userId]
   );
   return rows.map(rowToSpace);
 }

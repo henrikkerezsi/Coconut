@@ -204,7 +204,7 @@ describe('reportBudgets', () => {
       transaction(null, 9000),
     ]);
     expect(report).toContainEqual({
-      name: 'Uncategorized',
+      name: 'No budget',
       plannedCents: 0,
       spentCents: 9000,
       remainingCents: -9000,
@@ -212,7 +212,7 @@ describe('reportBudgets', () => {
     expect(report[1].name).toBe('A');
   });
 
-  it('omits the uncategorized entry when nothing is uncategorized', () => {
+  it('omits the no-budget entry when nothing is unassigned', () => {
     const report = reportBudgets([monthBudget(1, 10000)], { 1: budget(1, 'A') }, [
       transaction(1, 3000),
     ]);
@@ -281,7 +281,7 @@ describe('buildMonthlyReport', () => {
       })
     );
     expect(report.budgets).toContainEqual({
-      name: 'Uncategorized',
+      name: 'No budget',
       plannedCents: 0,
       spentCents: 3000,
       remainingCents: -3000,

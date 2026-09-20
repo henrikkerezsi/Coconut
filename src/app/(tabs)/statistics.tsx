@@ -100,11 +100,11 @@ export default function StatisticsScreen() {
       </Card>
 
       <Card mode="elevated" style={styles.card}>
-        <Card.Title title="Spending by category" />
+        <Card.Title title="Spending by budget" />
         <Card.Content>
           {allTimeByCategory.size === 0 ? (
             <Text variant="bodyMedium" style={styles.empty}>
-              No categorized spending yet.
+              No spending assigned to budgets yet.
             </Text>
           ) : (
             [...allTimeByCategory.entries()]

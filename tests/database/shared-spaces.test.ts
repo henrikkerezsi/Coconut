@@ -6,6 +6,7 @@ import {
   createSharedSpace,
   deleteSharedSpace,
   getMemberForUser,
+  getMySharedSpaces,
   getSpaceMembers,
   removeSpaceMember,
   renameSharedSpace,
@@ -174,6 +175,53 @@ describe('removeSpaceMember', () => {
       status: string;
     };
     expect(member.status).toBe('active');
+  });
+});
+
+describe('getMySharedSpaces', () => {
+  it('returns only spaces where the user is an active member', async () => {
+    const raw = freshDb();
+    const api = makeDbApi(raw) as never;
+    const mine = await createSharedSpace(
+      { name: 'Flat', ownerUserId: 'user-1', ownerEmail: 'one@example.com', ownerDisplayName: 'alice' },
+      api
+    );
+    const theirs = await createSharedSpace(
+      { name: 'Cabin', ownerUserId: 'user-2', ownerEmail: 'two@example.com', ownerDisplayName: null },
+      api
+    );
+    const third = await createSharedSpace(
+      { name: 'Garage', ownerUserId: 'user-3', ownerEmail: 'three@example.com', ownerDisplayName: null },
+      api
+    );
+    raw.exec(`INSERT INTO shared_space_members (space_id, user_id, email, role, status, joined_at)
+              VALUES (${theirs}, 'user-1', 'one@example.com', 'member', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`);
+
+    const spaces = await getMySharedSpaces('user-1', api);
+
+    expect(spaces.map((space) => space.name)).toEqual(['Flat', 'Cabin']);
+    expect(spaces.some((space) => space.name === 'Garage')).toBe(false);
+  });
+
+  it('hides spaces where the user has left or is still pending', async () => {
+    const raw = freshDb();
+    const api = makeDbApi(raw) as never;
+    const left = await createSharedSpace(
+      { name: 'Left', ownerUserId: 'user-2', ownerEmail: 'two@example.com', ownerDisplayName: null },
+      api
+    );
+    const pending = await createSharedSpace(
+      { name: 'Pending', ownerUserId: 'user-3', ownerEmail: 'three@example.com', ownerDisplayName: null },
+      api
+    );
+    raw.exec(`INSERT INTO shared_space_members (space_id, user_id, email, role, status, joined_at)
+              VALUES (${left}, 'user-1', 'one@example.com', 'member', 'left', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`);
+    raw.exec(`INSERT INTO shared_space_members (space_id, user_id, email, role, status, joined_at)
+              VALUES (${pending}, 'user-1', 'one@example.com', 'member', 'pending', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`);
+
+    const spaces = await getMySharedSpaces('user-1', api);
+
+    expect(spaces).toEqual([]);
   });
 });
 

@@ -91,7 +91,7 @@ export default function BudgetsScreen() {
         contentContainerStyle={styles.content}
         ListEmptyComponent={
           <PaperText variant="bodyMedium" style={styles.empty}>
-            No budget definitions yet. Add one to categorize transactions.
+            No budget definitions yet. Add one to assign transactions to a budget.
           </PaperText>
         }
       />

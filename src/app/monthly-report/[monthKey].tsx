@@ -97,7 +97,7 @@ export default function MonthlyReportScreen() {
         <Card.Title title="Summary" />
         <Card.Content>
           <ReportRow label="Monthly allowance" value={formatCents(report.allowanceCents, symbol)} />
-          <ReportRow label="Extra income" value={formatCents(report.incomeCents, symbol)} />
+          <ReportRow label="One-off income" value={formatCents(report.incomeCents, symbol)} />
           <ReportRow label="Total spent" value={formatCents(report.spendingCents, symbol)} />
         </Card.Content>
       </Card>

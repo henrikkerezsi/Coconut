@@ -557,6 +557,60 @@ describe('pullSharedChanges', () => {
     expect(count(raw, 'shared_expense_splits')).toBe(0);
   });
 
+  it('merges two open periods pulled from a sync race into one', async () => {
+    const raw = freshDb();
+    const api = makeDbApi(raw) as never;
+    const client = new FakeClient();
+    seedRemote(client);
+    client.seed('shared_expenses', {
+      uuid: 'expense-2',
+      space_uuid: 'space-1',
+      period_uuid: 'period-2',
+      description: 'Takeout',
+      total_amount_cents: 10000,
+      date: '2026-09-12',
+      paid_by_member_uuid: 'member-2',
+      note: null,
+      created_by_user_id: 'user-2',
+      deleted: false,
+      updated_at: REMOTE_TIMESTAMP,
+    });
+    client.seed('shared_expense_splits', {
+      uuid: 'split-3',
+      expense_uuid: 'expense-2',
+      member_uuid: 'member-2',
+      amount_cents: 5000,
+      updated_at: REMOTE_TIMESTAMP,
+    });
+    client.seed('shared_expense_splits', {
+      uuid: 'split-4',
+      expense_uuid: 'expense-2',
+      member_uuid: 'member-1',
+      amount_cents: 5000,
+      updated_at: REMOTE_TIMESTAMP,
+    });
+    client.seed('shared_periods', {
+      uuid: 'period-2',
+      space_uuid: 'space-1',
+      start_date: '2026-09-01',
+      end_date: null,
+      status: 'open',
+      updated_at: REMOTE_TIMESTAMP,
+    });
+
+    await pullSharedChanges(client as never, api);
+
+    const openPeriods = raw
+      .prepare(`SELECT id, uuid FROM shared_periods WHERE status = 'open'`)
+      .all() as Array<{ id: number; uuid: string }>;
+    expect(openPeriods).toHaveLength(1);
+    const expenses = raw
+      .prepare('SELECT uuid, period_id FROM shared_expenses')
+      .all() as Array<{ uuid: string; period_id: number }>;
+    expect(expenses).toHaveLength(2);
+    expect(expenses.every((expense) => expense.period_id === openPeriods[0].id)).toBe(true);
+  });
+
   it('expires a space that vanished remotely and decouples its linked transactions', async () => {
     const raw = freshDb();
     const client = new FakeClient();

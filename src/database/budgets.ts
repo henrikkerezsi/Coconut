@@ -70,6 +70,18 @@ export async function updateBudget(
   );
 }
 
+export async function reorderBudgets(
+  orderedIds: number[],
+  db?: SQLiteDatabase
+): Promise<void> {
+  const database = db ?? (await getDatabase());
+  await database.withTransactionAsync(async () => {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await database.runAsync('UPDATE budgets SET sort_order = ? WHERE id = ?', [i, orderedIds[i]]);
+    }
+  });
+}
+
 export async function deleteBudget(id: number, db?: SQLiteDatabase): Promise<void> {
   const database = db ?? (await getDatabase());
   await database.withTransactionAsync(async () => {

@@ -1,21 +1,19 @@
-import type { YearlySubscription } from '../../src/models';
+import type { Subscription } from '../../src/models';
 import {
   monthlyChargeCents,
-  monthlyFromYearly,
-  monthsHeld,
-  monthsUntilNextCharge,
-  nextChargeMonth,
+  monthlyFromTotal,
+  subscriptionMonths,
   subscriptionTotalCents,
 } from '../../src/services/subscription-service';
 
-function subscription(overrides: Partial<YearlySubscription> = {}): YearlySubscription {
+function subscription(overrides: Partial<Subscription> = {}): Subscription {
   return {
     id: 1,
     name: 'Streaming',
-    yearlyAmountCents: 12000,
+    totalAmountCents: 12000,
     monthlyAmountCents: 1000,
-    startedMonth: '2025-03',
-    billingMonth: '2024-04',
+    startMonth: '2025-03',
+    endMonth: '2026-02',
     deductMonthly: true,
     active: true,
     sortOrder: 0,
@@ -24,78 +22,65 @@ function subscription(overrides: Partial<YearlySubscription> = {}): YearlySubscr
 }
 
 describe('monthlyChargeCents', () => {
-  it('charges the monthly amount when active and deducting', () => {
-    expect(monthlyChargeCents(subscription())).toBe(1000);
+  it('returns the monthly amount while the month falls inside the period', () => {
+    expect(monthlyChargeCents(subscription(), '2025-03')).toBe(1000);
+    expect(monthlyChargeCents(subscription(), '2026-02')).toBe(1000);
+    expect(monthlyChargeCents(subscription(), '2025-10')).toBe(1000);
   });
 
-  it('charges nothing when deducting is off', () => {
-    expect(monthlyChargeCents(subscription({ deductMonthly: false }))).toBe(0);
+  it('returns zero outside the start/end period', () => {
+    expect(monthlyChargeCents(subscription({ startMonth: '2026-10' }), '2026-09')).toBe(0);
+    expect(monthlyChargeCents(subscription({ endMonth: '2026-05' }), '2026-06')).toBe(0);
   });
 
-  it('charges nothing when inactive', () => {
-    expect(monthlyChargeCents(subscription({ active: false }))).toBe(0);
+  it('returns zero when not deducted monthly', () => {
+    expect(monthlyChargeCents(subscription({ deductMonthly: false }), '2025-10')).toBe(0);
+  });
+
+  it('returns zero when the subscription is inactive', () => {
+    expect(monthlyChargeCents(subscription({ active: false }), '2025-10')).toBe(0);
   });
 });
 
 describe('subscriptionTotalCents', () => {
-  it('sums the monthly charges, ignoring non-deducting entries', () => {
-    const result = subscriptionTotalCents([
-      subscription({ monthlyAmountCents: 1000 }),
-      subscription({ monthlyAmountCents: 2500 }),
-      subscription({ monthlyAmountCents: 500, deductMonthly: false }),
-    ]);
-    expect(result).toBe(3500);
+  it('totals only the subscriptions charging the given month', () => {
+    const result = subscriptionTotalCents(
+      [
+        subscription({ monthlyAmountCents: 1000 }),
+        subscription({ monthlyAmountCents: 2500, active: false }),
+        subscription({ monthlyAmountCents: 3000, startMonth: '2027-01' }),
+      ],
+      '2025-10'
+    );
+    expect(result).toBe(1000);
   });
 
-  it('returns zero for no subscriptions', () => {
-    expect(subscriptionTotalCents([])).toBe(0);
-  });
-});
-
-describe('monthsHeld', () => {
-  it('counts whole months since the start', () => {
-    expect(monthsHeld(subscription({ startedMonth: '2025-03' }), '2026-09')).toBe(18);
-  });
-
-  it('never reports a negative value for future start months', () => {
-    expect(monthsHeld(subscription({ startedMonth: '2026-12' }), '2026-09')).toBe(0);
+  it('returns zero for an empty list', () => {
+    expect(subscriptionTotalCents([], '2025-10')).toBe(0);
   });
 });
 
-describe('nextChargeMonth', () => {
-  it('returns the billing month later in the same year', () => {
-    expect(nextChargeMonth(subscription({ billingMonth: '2024-04' }), '2026-01')).toBe('2026-04');
+describe('subscriptionMonths', () => {
+  it('counts the full period including both endpoints', () => {
+    expect(subscriptionMonths(subscription({ startMonth: '2025-10', endMonth: '2026-01' }))).toBe(4);
   });
 
-  it('rolls the billing month into the following year once it has passed', () => {
-    expect(nextChargeMonth(subscription({ billingMonth: '2024-04' }), '2026-06')).toBe('2027-04');
-  });
-
-  it('treats the reference month itself as the charge month', () => {
-    expect(nextChargeMonth(subscription({ billingMonth: '2024-04' }), '2026-04')).toBe('2026-04');
+  it('counts a single-month subscription as one month', () => {
+    expect(subscriptionMonths(subscription({ startMonth: '2025-03', endMonth: '2025-03' }))).toBe(1);
   });
 });
 
-describe('monthsUntilNextCharge', () => {
-  it('counts months until the next charge', () => {
-    expect(monthsUntilNextCharge(subscription({ billingMonth: '2024-04' }), '2026-01')).toBe(3);
-  });
-
-  it('reports zero when the next charge is this month', () => {
-    expect(monthsUntilNextCharge(subscription({ billingMonth: '2024-04' }), '2026-04')).toBe(0);
-  });
-
-  it('counts across the year boundary', () => {
-    expect(monthsUntilNextCharge(subscription({ billingMonth: '2024-04' }), '2026-06')).toBe(10);
-  });
-});
-
-describe('monthlyFromYearly', () => {
-  it('computes the monthly equivalent of the yearly price', () => {
-    expect(monthlyFromYearly(12000)).toBe(1000);
+describe('monthlyFromTotal', () => {
+  it('spreads the total evenly across the months', () => {
+    expect(monthlyFromTotal(5000, 4)).toBe(1250);
   });
 
   it('rounds to whole cents', () => {
-    expect(monthlyFromYearly(9599)).toBe(800);
+    expect(monthlyFromTotal(9599, 12)).toBe(800);
+  });
+
+  it('returns zero for an invalid period', () => {
+    expect(monthlyFromTotal(5000, 0)).toBe(0);
+    expect(monthlyFromTotal(5000, -3)).toBe(0);
   });
 });

@@ -1,19 +1,19 @@
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, List, Switch, Text, TextInput } from 'react-native-paper';
-import type { YearlySubscription } from '../models';
-import type { YearlySubscriptionInput } from '../database/yearlySubscriptions';
+import type { Subscription } from '../models';
+import type { SubscriptionInput } from '../database/subscriptions';
 import { AmountInput } from './amount-input';
 import { MonthField } from './month-field';
-import { currentMonthKey } from '../utils/date';
-import { monthlyFromYearly } from '../services/subscription-service';
+import { currentMonthKey, EVERGREEN_MONTH_KEY } from '../utils/date';
+import { monthlyFromTotal, subscriptionMonths } from '../services/subscription-service';
 import { useAppTheme } from '../theme';
 
 interface Props {
-  initialData: YearlySubscription | null;
+  initialData: Subscription | null;
   currencySymbol: string;
   submitting: boolean;
-  onSubmit: (draft: YearlySubscriptionInput) => void;
+  onSubmit: (draft: SubscriptionInput) => void;
 }
 
 export function SubscriptionForm({
@@ -23,17 +23,19 @@ export function SubscriptionForm({
   onSubmit,
 }: Props) {
   const [name, setName] = useState(initialData?.name ?? '');
-  const [yearlyAmountCents, setYearlyAmountCents] = useState<number | null>(
-    initialData?.yearlyAmountCents ?? null
+  const [totalAmountCents, setTotalAmountCents] = useState<number | null>(
+    initialData?.totalAmountCents ?? null
   );
   const [monthlyAmountCents, setMonthlyAmountCents] = useState<number | null>(
     initialData?.monthlyAmountCents ?? null
   );
-  const [startedMonth, setStartedMonth] = useState(
-    initialData?.startedMonth ?? currentMonthKey()
+  const [startMonth, setStartMonth] = useState(
+    initialData?.startMonth ?? currentMonthKey()
   );
-  const [billingMonth, setBillingMonth] = useState(
-    initialData?.billingMonth ?? currentMonthKey()
+  const [endMonth, setEndMonth] = useState(
+    initialData?.endMonth && initialData.endMonth !== EVERGREEN_MONTH_KEY
+      ? initialData.endMonth
+      : currentMonthKey()
   );
   const [deductMonthly, setDeductMonthly] = useState(initialData?.deductMonthly ?? true);
   const [active, setActive] = useState(initialData?.active ?? true);
@@ -41,14 +43,20 @@ export function SubscriptionForm({
   const theme = useAppTheme();
 
   const hasName = name.trim().length > 0;
+  const periodMonths = subscriptionMonths({ startMonth, endMonth });
+  const periodValid = endMonth >= startMonth;
 
   function handleSubmit() {
     setAmountError(null);
     if (!hasName) {
       return;
     }
-    if (yearlyAmountCents === null || yearlyAmountCents <= 0) {
-      setAmountError('Enter a valid yearly amount.');
+    if (!periodValid) {
+      setAmountError('End month must be after the start month.');
+      return;
+    }
+    if (totalAmountCents === null || totalAmountCents <= 0) {
+      setAmountError('Enter a valid total amount.');
       return;
     }
     if (monthlyAmountCents === null || monthlyAmountCents <= 0) {
@@ -57,10 +65,10 @@ export function SubscriptionForm({
     }
     onSubmit({
       name: name.trim(),
-      yearlyAmountCents,
+      totalAmountCents,
       monthlyAmountCents,
-      startedMonth,
-      billingMonth,
+      startMonth,
+      endMonth,
       deductMonthly,
       active,
       sortOrder: initialData?.sortOrder ?? 0,
@@ -78,9 +86,9 @@ export function SubscriptionForm({
         style={styles.field}
       />
       <AmountInput
-        label="Yearly amount"
-        value={yearlyAmountCents}
-        onChange={setYearlyAmountCents}
+        label="Total amount"
+        value={totalAmountCents}
+        onChange={setTotalAmountCents}
         prefix={currencySymbol}
         error={amountError}
       />
@@ -93,22 +101,27 @@ export function SubscriptionForm({
         />
       </View>
       <List.Item
-        title="Monthly = yearly ÷ 12"
-        description="Use the yearly price split evenly by month"
+        title={`Calculate monthly amount for ${periodMonths} ${periodMonths === 1 ? 'month' : 'months'}`}
+        description="Split the total amount evenly across the period"
         titleStyle={styles.helperTitle}
         descriptionStyle={styles.helperDescription}
         onPress={() => {
-          if (yearlyAmountCents !== null) {
-            setMonthlyAmountCents(monthlyFromYearly(yearlyAmountCents));
+          if (totalAmountCents !== null && periodValid) {
+            setMonthlyAmountCents(monthlyFromTotal(totalAmountCents, periodMonths));
           }
         }}
       />
 
       <List.Subheader style={styles.sectionSubheader}>Timeline</List.Subheader>
       <Text variant="bodyMedium" style={styles.sectionTitle}>Since</Text>
-      <MonthField value={startedMonth} onChange={setStartedMonth} label="Start month" />
-      <Text variant="bodyMedium" style={styles.sectionTitle}>Charged every year in</Text>
-      <MonthField value={billingMonth} onChange={setBillingMonth} label="Renewal month" />
+      <MonthField value={startMonth} onChange={setStartMonth} label="Start month" />
+      <Text variant="bodyMedium" style={styles.sectionTitle}>Until</Text>
+      <MonthField value={endMonth} onChange={setEndMonth} label="End month" />
+      {!periodValid ? (
+        <Text variant="bodySmall" style={[styles.generalError, { color: theme.colors.error }]}>
+          The end month must be on or after the start month.
+        </Text>
+      ) : null}
 
       <List.Item
         title="Deduct monthly"

@@ -158,6 +158,9 @@ export function validateExpense(params: {
   paidByMemberId: number | null;
   memberIds: number[];
   splits: SharedSplitRecord[];
+  date: string;
+  periodStart: string;
+  today: string;
 }): { ok: true } | { ok: false; error: string } {
   if (!params.description.trim()) {
     return { ok: false, error: 'Description is required.' };
@@ -182,6 +185,12 @@ export function validateExpense(params: {
   const sum = params.splits.reduce((acc, split) => acc + split.amountCents, 0);
   if (sum !== params.totalCents) {
     return { ok: false, error: 'Split amounts must add up to the total.' };
+  }
+  if (params.date < params.periodStart) {
+    return { ok: false, error: 'The date cannot be before the period start.' };
+  }
+  if (params.date > params.today) {
+    return { ok: false, error: 'The date cannot be in the future.' };
   }
   return { ok: true };
 }

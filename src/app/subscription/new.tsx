@@ -7,7 +7,7 @@ import { LoadingScreen } from '../../components/loading-screen';
 
 export default function NewSubscriptionScreen() {
   const router = useRouter();
-  const { ready, settings, addYearlySubscription } = useAppData();
+  const { ready, settings, addSubscription } = useAppData();
   const [submitting, setSubmitting] = useState(false);
 
   if (!ready) {
@@ -18,7 +18,7 @@ export default function NewSubscriptionScreen() {
     <>
       <Appbar.Header>
         <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title="New yearly subscription" />
+        <Appbar.Content title="New subscription" />
       </Appbar.Header>
       <SubscriptionForm
         initialData={null}
@@ -27,7 +27,7 @@ export default function NewSubscriptionScreen() {
         onSubmit={async (draft) => {
           setSubmitting(true);
           try {
-            await addYearlySubscription(draft);
+            await addSubscription(draft);
             router.back();
           } finally {
             setSubmitting(false);

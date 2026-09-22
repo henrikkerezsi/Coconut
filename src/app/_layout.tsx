@@ -80,7 +80,7 @@ function ThemedContent() {
           />
           <Stack.Screen
             name="planning/subscriptions"
-            options={{ title: 'Yearly Subscriptions' }}
+            options={{ title: 'Subscriptions' }}
           />
           <Stack.Screen
             name="planning/reserve"

@@ -2,11 +2,13 @@ import React, { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Button, Card, List, Portal, Text } from 'react-native-paper';
-import type { Transaction } from '../../models';
+import type { Attachment, Transaction } from '../../models';
 import { getTransaction } from '../../database/transactions';
 import { getExpenseTraceByOriginId, type SharedExpenseTrace } from '../../database/sharedExpenses';
 import { useAppData } from '../../data/DataProvider';
 import { TransactionForm } from '../../components/transaction-form';
+import { AttachmentField } from '../../components/attachment-field';
+import { BudgetSelect } from '../../components/budget-select';
 import { AppDialog } from '../../components/app-dialog';
 import { LoadingScreen } from '../../components/loading-screen';
 import { useAppTheme } from '../../theme';
@@ -14,10 +16,20 @@ import { formatCents } from '../../utils/currency';
 
 export default function EditTransactionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { budgets, settings, saveTransaction, removeTransaction, suggestBudgets } = useAppData();
+  const {
+    budgets,
+    settings,
+    saveTransaction,
+    saveTransactionAttachment,
+    saveTransactionBudget,
+    removeTransaction,
+    suggestBudgets,
+  } = useAppData();
   const theme = useAppTheme();
   const router = useRouter();
   const [transaction, setTransaction] = useState<Transaction | null>(null);
+  const [attachment, setAttachment] = useState<Attachment | null>(null);
+  const [budgetId, setBudgetId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [trace, setTrace] = useState<SharedExpenseTrace | null>(null);
 
@@ -27,6 +39,16 @@ export default function EditTransactionScreen() {
       getTransaction(Number(id)).then((result) => {
         if (active && result) {
           setTransaction(result);
+          setBudgetId(result.budgetId);
+          setAttachment(
+            result.attachment
+              ? {
+                  name: result.attachmentName ?? 'attachment',
+                  mime: result.attachmentMime ?? 'application/octet-stream',
+                  bytes: result.attachment,
+                }
+              : null
+          );
         }
       });
       return () => {
@@ -66,6 +88,22 @@ export default function EditTransactionScreen() {
       pathname: '/shared/expense',
       params: { spaceId: String(trace.spaceId), id: String(trace.expenseId) },
     });
+  };
+
+  const handleAttachmentChange = (next: Attachment | null) => {
+    if (!transaction) {
+      return;
+    }
+    setAttachment(next);
+    void saveTransactionAttachment(transaction.id, next);
+  };
+
+  const handleBudgetChange = (next: number | null) => {
+    if (!transaction) {
+      return;
+    }
+    setBudgetId(next);
+    void saveTransactionBudget(transaction.id, next);
   };
 
   return (
@@ -114,6 +152,16 @@ export default function EditTransactionScreen() {
             description="Date"
             left={(props) => <List.Icon {...props} icon="calendar-outline" />}
           />
+          <BudgetSelect
+            budgets={budgets}
+            selectedId={budgetId}
+            onSelect={handleBudgetChange}
+            symbol={settings.currencySymbol}
+          />
+          <Text variant="bodySmall" style={styles.attachmentHint}>
+            Attachment is kept on this device only.
+          </Text>
+          <AttachmentField value={attachment} onChange={handleAttachmentChange} />
         </View>
       ) : (
         <>
@@ -185,6 +233,10 @@ const styles = StyleSheet.create({
   traceButton: {
     marginTop: 12,
     alignSelf: 'flex-start',
+  },
+  attachmentHint: {
+    marginTop: 12,
+    opacity: 0.6,
   },
   deleteRow: {
     alignItems: 'center',

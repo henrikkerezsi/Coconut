@@ -3,6 +3,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { MIGRATIONS } from '../../src/database/migrations';
 import { decoupleSharedTransactions, reconcileSharedTransactions } from '../../src/database/sharedLinking';
+import { getTransaction, updateTransactionAttachment, updateTransactionBudget } from '../../src/database/transactions';
 
 interface TestDb {
   getFirstAsync<T>(sql: string, params?: unknown[]): Promise<T | null>;
@@ -109,10 +110,11 @@ function linkedTransactions(db: DatabaseSync): Array<{
   origin_type: string | null;
   origin_id: string | null;
   merchant: string;
+  budget_id: number | null;
 }> {
   return db
     .prepare(
-      `SELECT id, amount_cents, origin_type, origin_id, merchant
+      `SELECT id, amount_cents, origin_type, origin_id, merchant, budget_id
          FROM transactions ORDER BY id ASC`
     )
     .all() as Array<{
@@ -121,6 +123,7 @@ function linkedTransactions(db: DatabaseSync): Array<{
     origin_type: string | null;
     origin_id: string | null;
     merchant: string;
+    budget_id: number | null;
   }>;
 }
 
@@ -185,6 +188,77 @@ describe('reconcileSharedTransactions', () => {
   });
 });
 
+describe('reconcileSharedTransactions with local attachments', () => {
+  const bytes = new Uint8Array([7, 8, 9]);
+
+  it('keeps a locally-attached file when the linked transaction is re-derived', async () => {
+    const raw = freshDb();
+    const fixture = seedSpace(raw);
+    const { uuid } = addExpense(raw, fixture, 10000, 4000, 6000);
+    await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
+
+    const linked = linkedTransactions(raw);
+    expect(linked).toHaveLength(1);
+    await updateTransactionAttachment(
+      linked[0].id,
+      { name: 'receipt.png', mime: 'image/png', bytes },
+      makeDbApi(raw) as never
+    );
+
+    await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
+
+    const kept = await getTransaction(linked[0].id, makeDbApi(raw) as never);
+    expect(kept?.attachmentName).toBe('receipt.png');
+    expect(kept?.attachmentMime).toBe('image/png');
+    expect(Array.from(kept?.attachment ?? new Uint8Array())).toEqual(Array.from(bytes));
+  });
+
+  it('re-derives the amount while preserving the local attachment', async () => {
+    const raw = freshDb();
+    const fixture = seedSpace(raw);
+    const { expenseId } = addExpense(raw, fixture, 10000, 4000, 6000);
+    await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
+
+    const linked = linkedTransactions(raw);
+    await updateTransactionAttachment(
+      linked[0].id,
+      { name: 'receipt.png', mime: 'image/png', bytes },
+      makeDbApi(raw) as never
+    );
+
+    raw.exec(
+      `UPDATE shared_expense_splits SET amount_cents = 2500
+        WHERE expense_id = ${expenseId} AND member_id = ${fixture.memberOne}`
+    );
+    await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
+
+    const rederived = await getTransaction(linked[0].id, makeDbApi(raw) as never);
+    expect(rederived?.amountCents).toBe(2500);
+    expect(rederived?.attachmentName).toBe('receipt.png');
+    expect(Array.from(rederived?.attachment ?? new Uint8Array())).toEqual(Array.from(bytes));
+  });
+
+  it('updating the attachment to null clears it on the linked transaction', async () => {
+    const raw = freshDb();
+    const fixture = seedSpace(raw);
+    const { uuid } = addExpense(raw, fixture, 10000, 4000, 6000);
+    await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
+
+    const linked = linkedTransactions(raw);
+    await updateTransactionAttachment(
+      linked[0].id,
+      { name: 'receipt.png', mime: 'image/png', bytes },
+      makeDbApi(raw) as never
+    );
+    await updateTransactionAttachment(linked[0].id, null, makeDbApi(raw) as never);
+
+    const cleared = await getTransaction(linked[0].id, makeDbApi(raw) as never);
+    expect(cleared?.attachmentName).toBeNull();
+    expect(cleared?.attachmentMime).toBeNull();
+    expect(cleared?.attachment).toBeNull();
+  });
+});
+
 describe('decoupleSharedTransactions', () => {
   it('clears the link but keeps the personal transaction', async () => {
     const raw = freshDb();
@@ -208,5 +282,103 @@ describe('decoupleSharedTransactions', () => {
     const raw = freshDb();
     const changes = await decoupleSharedTransactions([], makeDbApi(raw) as never);
     expect(changes).toBe(0);
+  });
+});
+
+describe('mirror budget assignment', () => {
+  function seedBudget(db: DatabaseSync, name: string): number {
+    db.exec(`INSERT INTO budgets (name, default_amount_cents) VALUES ('${name}', 50000)`);
+    return (db.prepare('SELECT id FROM budgets WHERE name = ?').get(name) as { id: number }).id;
+  }
+
+  function addPersonalTransaction(
+    db: DatabaseSync,
+    merchant: string,
+    budgetId: number | null,
+    date: string
+  ): void {
+    db.exec(
+      `INSERT OR IGNORE INTO months (month_key, allowance_cents, starting_reserve_cents)
+       VALUES ('2026-09', 100000, 0)`
+    );
+    db.exec(
+      `INSERT INTO transactions (month_key, date, amount_cents, budget_id, merchant)
+       VALUES ('2026-09', '${date}', 1000, ${budgetId === null ? 'NULL' : budgetId}, '${merchant}')`
+    );
+  }
+
+  it('assigns the budget of the newest same-name transaction on first mirror', async () => {
+    const raw = freshDb();
+    const fixture = seedSpace(raw);
+    const olderBudget = seedBudget(raw, 'Eating out');
+    const newestBudget = seedBudget(raw, 'Groceries');
+    addPersonalTransaction(raw, 'Dinner', olderBudget, '2026-09-01');
+    addPersonalTransaction(raw, 'Dinner', newestBudget, '2026-09-20');
+    addExpense(raw, fixture, 10000, 4000, 6000);
+
+    await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
+
+    const mirror = linkedTransactions(raw).find((row) => row.origin_type === 'shared');
+    expect(mirror?.merchant).toBe('Dinner');
+    expect(mirror?.budget_id).toBe(newestBudget);
+  });
+
+  it('leaves the mirror without a budget when no same-name transaction exists', async () => {
+    const raw = freshDb();
+    const fixture = seedSpace(raw);
+    addExpense(raw, fixture, 10000, 4000, 6000);
+
+    await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
+
+    const linked = linkedTransactions(raw);
+    expect(linked).toHaveLength(1);
+    expect(linked[0].budget_id).toBeNull();
+  });
+
+  it('does not re-run the budget lookup when the mirror is re-derived', async () => {
+    const raw = freshDb();
+    const fixture = seedSpace(raw);
+    const initialBudget = seedBudget(raw, 'Groceries');
+    const changedBudget = seedBudget(raw, 'Eating out');
+    addPersonalTransaction(raw, 'Dinner', initialBudget, '2026-09-20');
+    const { expenseId } = addExpense(raw, fixture, 10000, 4000, 6000);
+    await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
+    expect(linkedTransactions(raw).find((row) => row.origin_type === 'shared')?.budget_id).toBe(
+      initialBudget
+    );
+
+    addPersonalTransaction(raw, 'Dinner', changedBudget, '2026-09-25');
+    raw.exec(
+      `UPDATE shared_expense_splits SET amount_cents = 2500
+        WHERE expense_id = ${expenseId} AND member_id = ${fixture.memberOne}`
+    );
+    await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
+
+    const mirror = linkedTransactions(raw).find((row) => row.origin_type === 'shared');
+    expect(mirror?.amount_cents).toBe(2500);
+    expect(mirror?.budget_id).toBe(initialBudget);
+  });
+
+  it('preserves a manually-chosen budget across re-derives', async () => {
+    const raw = freshDb();
+    const fixture = seedSpace(raw);
+    const chosen = seedBudget(raw, 'Groceries');
+    const { expenseId } = addExpense(raw, fixture, 10000, 4000, 6000);
+    await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
+    expect(linkedTransactions(raw)[0].budget_id).toBeNull();
+
+    const mirror = linkedTransactions(raw)[0];
+    await updateTransactionBudget(mirror.id, chosen, makeDbApi(raw) as never);
+
+    raw.exec(
+      `UPDATE shared_expense_splits SET amount_cents = 2500
+        WHERE expense_id = ${expenseId} AND member_id = ${fixture.memberOne}`
+    );
+    await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
+
+    const rederived = linkedTransactions(raw);
+    expect(rederived).toHaveLength(1);
+    expect(rederived[0].amount_cents).toBe(2500);
+    expect(rederived[0].budget_id).toBe(chosen);
   });
 });

@@ -134,7 +134,7 @@ export default function MonthlyReportScreen() {
 
       <Card mode="elevated" style={styles.card} contentStyle={styles.cardContent}>
         <Card.Title
-          title="Yearly subscriptions"
+          title="Subscriptions"
           subtitle={`${formatCents(report.subscriptionTotalCents, symbol)} deducted this month`}
         />
         <Card.Content>
@@ -147,11 +147,7 @@ export default function MonthlyReportScreen() {
               <List.Item
                 key={subscription.name}
                 title={subscription.name}
-                description={
-                  subscription.renewalDueThisMonth
-                    ? 'Yearly renewal due this month'
-                    : 'Monthly deduction'
-                }
+                description="Monthly deduction"
                 left={(props) => <List.Icon {...props} icon="calendar-refresh-outline" />}
                 right={() => (
                   <Text variant="bodyLarge">{formatCents(subscription.monthlyCents, symbol)}</Text>

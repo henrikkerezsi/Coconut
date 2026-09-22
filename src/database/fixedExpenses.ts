@@ -113,6 +113,21 @@ export async function updateFixedExpense(
   );
 }
 
+export async function reorderFixedExpenses(
+  orderedIds: number[],
+  db?: SQLiteDatabase
+): Promise<void> {
+  const database = db ?? (await getDatabase());
+  await database.withTransactionAsync(async () => {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await database.runAsync('UPDATE fixed_expenses SET sort_order = ? WHERE id = ?', [
+        i,
+        orderedIds[i],
+      ]);
+    }
+  });
+}
+
 export async function deleteFixedExpense(id: number, db?: SQLiteDatabase): Promise<void> {
   const database = db ?? (await getDatabase());
   await database.withTransactionAsync(async () => {

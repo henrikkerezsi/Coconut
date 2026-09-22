@@ -6,6 +6,60 @@ export interface Migration {
   sql: string;
 }
 
+export interface SubscriptionRepairColumns {
+  hasTotal: boolean;
+  hasStart: boolean;
+  hasEnd: boolean;
+  hasUuid: boolean;
+  hasUpdatedAt: boolean;
+}
+
+/**
+ * Builds the SQL that normalizes yearly_subscriptions into the period-based
+ * shape (total_amount_cents, start_month, end_month, no billing_month) no
+ * matter which earlier schema the table is in. Used to heal databases that
+ * predate the period-based redesign.
+ */
+export function subscriptionRepairSql(columns: SubscriptionRepairColumns): string {
+  const totalColumn = columns.hasTotal ? 'total_amount_cents' : 'yearly_amount_cents';
+  const startColumn = columns.hasStart ? 'start_month' : 'started_month';
+  const endExpr = columns.hasEnd ? "COALESCE(end_month, '9999-12')" : "'9999-12'";
+  const uuidExpr = columns.hasUuid ? 'uuid' : 'lower(hex(randomblob(16)))';
+  const updatedExpr = columns.hasUpdatedAt
+    ? 'updated_at'
+    : "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
+  return `
+CREATE TABLE yearly_subscriptions_v2 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  total_amount_cents INTEGER NOT NULL,
+  monthly_amount_cents INTEGER NOT NULL,
+  start_month TEXT NOT NULL,
+  end_month TEXT NOT NULL DEFAULT '9999-12',
+  deduct_monthly INTEGER NOT NULL DEFAULT 1,
+  active INTEGER NOT NULL DEFAULT 1,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  uuid TEXT,
+  updated_at TEXT
+);
+
+INSERT OR IGNORE INTO yearly_subscriptions_v2
+  (id, name, total_amount_cents, monthly_amount_cents, start_month, end_month, deduct_monthly, active, sort_order, created_at, uuid, updated_at)
+  SELECT id, name, ${totalColumn}, monthly_amount_cents, ${startColumn}, ${endExpr}, deduct_monthly, active, sort_order, created_at, ${uuidExpr}, ${updatedExpr}
+  FROM yearly_subscriptions;
+
+DROP TABLE yearly_subscriptions;
+ALTER TABLE yearly_subscriptions_v2 RENAME TO yearly_subscriptions;
+
+CREATE INDEX IF NOT EXISTS idx_yearly_subscriptions_active ON yearly_subscriptions (active);
+CREATE INDEX IF NOT EXISTS idx_yearly_subscriptions_sort ON yearly_subscriptions (sort_order);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_yearly_subscriptions_uuid ON yearly_subscriptions (uuid);
+
+${syncTriggersSql()}
+`;
+}
+
 const SYNC_TABLE_SPECS: Record<string, { pk: string; identity: string }> = {
   months: { pk: 'month_key', identity: 'month_key' },
   fixed_expenses: { pk: 'id', identity: 'uuid' },
@@ -18,7 +72,7 @@ const SYNC_TABLE_SPECS: Record<string, { pk: string; identity: string }> = {
   yearly_subscriptions: { pk: 'id', identity: 'uuid' },
 };
 
-function syncTriggersSql(): string {
+export function syncTriggersSql(): string {
   const parts: string[] = [];
   const timestampSql = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
   const pullGuard = `(SELECT COALESCE((SELECT value FROM sync_meta WHERE key = 'pull_in_progress'), '0') = '0')`;
@@ -413,6 +467,40 @@ ${syncTriggersSql()}
     description: 'Last sync error for visible diagnostics',
     sql: `
 ALTER TABLE sync_state ADD COLUMN last_sync_error TEXT;
+`,
+  },
+  {
+    id: 12,
+    description: 'Period-based subscriptions',
+    sql: `
+CREATE TABLE yearly_subscriptions_new (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  total_amount_cents INTEGER NOT NULL,
+  monthly_amount_cents INTEGER NOT NULL,
+  start_month TEXT NOT NULL,
+  end_month TEXT NOT NULL DEFAULT '9999-12',
+  deduct_monthly INTEGER NOT NULL DEFAULT 1,
+  active INTEGER NOT NULL DEFAULT 1,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  uuid TEXT,
+  updated_at TEXT
+);
+
+INSERT INTO yearly_subscriptions_new
+  (id, name, total_amount_cents, monthly_amount_cents, start_month, end_month, deduct_monthly, active, sort_order, created_at, uuid, updated_at)
+SELECT id, name, yearly_amount_cents, monthly_amount_cents, started_month, '9999-12', deduct_monthly, active, sort_order, created_at, uuid, updated_at
+  FROM yearly_subscriptions;
+
+DROP TABLE yearly_subscriptions;
+ALTER TABLE yearly_subscriptions_new RENAME TO yearly_subscriptions;
+
+CREATE INDEX IF NOT EXISTS idx_yearly_subscriptions_active ON yearly_subscriptions (active);
+CREATE INDEX IF NOT EXISTS idx_yearly_subscriptions_sort ON yearly_subscriptions (sort_order);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_yearly_subscriptions_uuid ON yearly_subscriptions (uuid);
+
+${syncTriggersSql()}
 `,
   },
 ];

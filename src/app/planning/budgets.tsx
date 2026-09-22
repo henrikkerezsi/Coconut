@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
-import { FAB, List, Portal, Text as PaperText, IconButton } from 'react-native-paper';
+import { StyleSheet, View } from 'react-native';
+import { FAB, IconButton, List, Portal, Text as PaperText } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useAppData } from '../../data/DataProvider';
 import { formatCents } from '../../utils/currency';
 import { LoadingScreen } from '../../components/loading-screen';
 import { AmountInput } from '../../components/amount-input';
 import { AppDialog } from '../../components/app-dialog';
+import { DragHandle, ReorderableList } from '../../components/reorderable-list';
 import type { BudgetWithStatus } from '../../data/DataProvider';
 import { useAppTheme } from '../../theme';
 import { FadeIn } from '../../components/fade-in';
@@ -21,6 +22,7 @@ export default function BudgetsScreen() {
     currentDashboard,
     removeBudget,
     setBudgetPlanned,
+    reorderBudgets,
   } = useAppData();
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [planned, setPlanned] = useState<BudgetWithStatus | null>(null);
@@ -34,14 +36,14 @@ export default function BudgetsScreen() {
 
   const symbol = settings.currencySymbol;
   const statuses = currentDashboard?.budgetStatuses ?? [];
-  const spentByBudgetId = new Map<number, number>();
-  for (const status of statuses) {
-    spentByBudgetId.set(status.budget.id, status.status.spentCents);
-  }
 
   return (
     <>
-      <FlatList
+      <ReorderableList
+        items={budgets}
+        keyExtractor={(item) => String(item.id)}
+        rowHeight={64}
+        onReorder={(next) => void reorderBudgets(next.map((budget) => budget.id))}
         ListHeaderComponent={
           <>
             <List.Subheader>Planned this month</List.Subheader>
@@ -71,10 +73,28 @@ export default function BudgetsScreen() {
             <List.Subheader>Definitions</List.Subheader>
           </>
         }
-        data={budgets}
-        keyExtractor={(item) => String(item.id)}
-        renderItem={({ item }) => (
-          <FadeIn>
+        ListEmptyComponent={
+          <PaperText variant="bodyMedium" style={styles.empty}>
+            No budget definitions yet. Add one to assign transactions to a budget.
+          </PaperText>
+        }
+        renderRow={(item, { isDragged, handleProps }) => (
+          <View
+            style={[
+              styles.definitionRow,
+              isDragged
+                ? {
+                    backgroundColor: theme.colors.surface,
+                    elevation: 4,
+                    shadowColor: '#000000',
+                    shadowOpacity: 0.16,
+                    shadowRadius: 6,
+                    shadowOffset: { width: 0, height: 2 },
+                  }
+                : null,
+            ]}
+          >
+            <DragHandle isDragged={isDragged} handleProps={handleProps} label={`Reorder ${item.name}`} />
             <List.Item
               title={item.name}
               description={`Default: ${formatCents(item.defaultAmountCents, symbol)}`}
@@ -85,15 +105,11 @@ export default function BudgetsScreen() {
                 </View>
               )}
               onPress={() => router.push(`/budget/${item.id}`)}
+              style={styles.definitionContent}
             />
-          </FadeIn>
+          </View>
         )}
         contentContainerStyle={styles.content}
-        ListEmptyComponent={
-          <PaperText variant="bodyMedium" style={styles.empty}>
-            No budget definitions yet. Add one to assign transactions to a budget.
-          </PaperText>
-        }
       />
       {planned !== null && (
         <Portal>
@@ -197,5 +213,14 @@ const styles = StyleSheet.create({
   dialogHint: {
     marginTop: 8,
     opacity: 0.6,
+  },
+  definitionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 64,
+    paddingRight: 8,
+  },
+  definitionContent: {
+    flex: 1,
   },
 });

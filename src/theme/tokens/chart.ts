@@ -1,12 +1,12 @@
 export const chartPalette: readonly string[] = [
-  '#5B4636',
-  '#56745A',
-  '#6F9FA3',
-  '#B58A52',
-  '#806A7A',
-  '#72816A',
-  '#9A7060',
-  '#7A8790',
+  '#E14B33',
+  '#E07F1F',
+  '#E5A419',
+  '#8FA932',
+  '#3E9A4D',
+  '#16A08F',
+  '#4678D8',
+  '#8D4FC2',
 ];
 
 export type ChartColor = (typeof chartPalette)[number];

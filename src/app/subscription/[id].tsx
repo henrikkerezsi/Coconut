@@ -10,7 +10,7 @@ import { useAppTheme } from '../../theme';
 export default function EditSubscriptionScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { ready, settings, allSubscriptions, saveYearlySubscription, removeYearlySubscription } =
+  const { ready, settings, allSubscriptions, saveSubscription, removeSubscription } =
     useAppData();
   const theme = useAppTheme();
   const [submitting, setSubmitting] = useState(false);
@@ -25,7 +25,7 @@ export default function EditSubscriptionScreen() {
     <>
       <Appbar.Header>
         <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title="Yearly subscription" />
+        <Appbar.Content title="Subscription" />
       </Appbar.Header>
       {loading ? (
         <LoadingScreen />
@@ -41,7 +41,7 @@ export default function EditSubscriptionScreen() {
               }
               setSubmitting(true);
               try {
-                await saveYearlySubscription(subscription.id, draft);
+                await saveSubscription(subscription.id, draft);
                 router.back();
               } finally {
                 setSubmitting(false);
@@ -53,7 +53,7 @@ export default function EditSubscriptionScreen() {
               mode="text"
               textColor={theme.semantic.delete}
               onPress={() => {
-                removeYearlySubscription(subscription!.id).then(() => router.back());
+                removeSubscription(subscription!.id).then(() => router.back());
               }}
             >
               Delete subscription

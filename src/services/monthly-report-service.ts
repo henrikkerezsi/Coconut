@@ -8,13 +8,12 @@ import type {
   MonthKey,
   ReserveTransfer,
   Transaction,
-  YearlySubscription,
+  Subscription,
 } from '../models';
 import { budgetStatus, fixedExpenseAmount, incomeTotal, transactionTotal } from './forecast-service';
 import { reserveAdjustmentCents } from './allowance-service';
 import { sumTransfers } from './reserve-service';
 import { spendingByCategory } from './statistics-service';
-import { nextChargeMonth } from './subscription-service';
 
 export interface MonthlyReportFixedExpense {
   name: string;
@@ -26,7 +25,6 @@ export interface MonthlyReportFixedExpense {
 export interface MonthlyReportSubscription {
   name: string;
   monthlyCents: number;
-  renewalDueThisMonth: boolean;
 }
 
 export interface MonthlyReportBudget {
@@ -42,7 +40,7 @@ export interface MonthlyReportInput {
   budgets: MonthBudget[];
   transactions: Transaction[];
   income: Income[];
-  subscriptions: YearlySubscription[];
+  subscriptions: Subscription[];
   transfers: ReserveTransfer[];
   fixedExpenseDefinitions: Record<number, FixedExpense>;
   budgetDefinitions: Record<number, Budget>;
@@ -83,19 +81,23 @@ export function reportFixedExpenses(
 
 /**
  * Subscriptions that charged money during the month: every active subscription
- * with a monthly deduction. A subscription whose yearly renewal falls in this
- * month is flagged.
+ * with a monthly deduction whose start/end period covers the month.
  */
 export function subscriptionsChargedInMonth(
-  subscriptions: YearlySubscription[],
+  subscriptions: Subscription[],
   monthKey: MonthKey
 ): MonthlyReportSubscription[] {
   return subscriptions
-    .filter((subscription) => subscription.active && subscription.deductMonthly)
+    .filter(
+      (subscription) =>
+        subscription.active &&
+        subscription.deductMonthly &&
+        monthKey >= subscription.startMonth &&
+        monthKey <= subscription.endMonth
+    )
     .map((subscription) => ({
       name: subscription.name,
       monthlyCents: subscription.monthlyAmountCents,
-      renewalDueThisMonth: nextChargeMonth(subscription, monthKey) === monthKey,
     }));
 }
 

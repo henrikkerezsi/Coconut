@@ -9,6 +9,9 @@ const DAYJS_MONTH_KEY_FORMAT = 'YYYY-MM';
 
 export const DAYJS_STORE_DATE_FORMAT = 'YYYY-MM-DD';
 
+/** Sentinel end month assigned to subscriptions created before periods existed. */
+export const EVERGREEN_MONTH_KEY: MonthKey = '9999-12';
+
 export function monthKeyOf(date: string | Dayjs | Date): MonthKey {
   return dayjs(date).format(DAYJS_MONTH_KEY_FORMAT);
 }

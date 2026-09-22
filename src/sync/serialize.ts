@@ -136,10 +136,10 @@ export const COMPLETE_ADAPTERS: SyncTableAdapter[] = [
     identityColumn: 'uuid',
     fields: [
       { local: 'name', remote: 'name' },
-      { local: 'yearly_amount_cents', remote: 'yearly_amount_cents' },
+      { local: 'total_amount_cents', remote: 'total_amount_cents' },
       { local: 'monthly_amount_cents', remote: 'monthly_amount_cents' },
-      { local: 'started_month', remote: 'started_month' },
-      { local: 'billing_month', remote: 'billing_month' },
+      { local: 'start_month', remote: 'start_month' },
+      { local: 'end_month', remote: 'end_month' },
       { local: 'deduct_monthly', remote: 'deduct_monthly', booleanType: true },
       { local: 'active', remote: 'active', booleanType: true },
       { local: 'sort_order', remote: 'sort_order' },

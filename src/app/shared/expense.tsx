@@ -74,6 +74,7 @@ export default function SharedExpenseScreen() {
   const [total, setTotal] = useState('');
   const [date, setDate] = useState(dayjs().format(DAYJS_STORE_DATE_FORMAT));
   const [paidBy, setPaidBy] = useState<number | null>(null);
+  const [note, setNote] = useState('');
   const [method, setMethod] = useState<SharedSplitMethod>('equal');
   const [selected, setSelected] = useState<Record<number, boolean>>({});
   const [exact, setExact] = useState<Record<number, string>>({});
@@ -108,6 +109,7 @@ export default function SharedExpenseScreen() {
     setDescription(existing.expense.description);
     setTotal(centsToInput(existing.expense.totalAmountCents));
     setDate(existing.expense.date);
+    setNote(existing.expense.note ?? '');
     setPaidBy(
       active.some((member) => member.id === existing.expense.paidByMemberId)
         ? existing.expense.paidByMemberId
@@ -178,6 +180,9 @@ export default function SharedExpenseScreen() {
       paidByMemberId: paidBy,
       memberIds: members.map((member) => member.id),
       splits: preview.splits,
+      date,
+      periodStart: period.startDate,
+      today: dayjs().format(DAYJS_STORE_DATE_FORMAT),
     });
     if (!validation.ok) {
       setError(validation.error);
@@ -193,7 +198,7 @@ export default function SharedExpenseScreen() {
         totalAmountCents: totalCents,
         date,
         paidByMemberId: paidBy as number,
-        note: expense?.expense.note ?? null,
+        note: note.trim().length > 0 ? note.trim() : null,
         createdByUserId: sessionUser.id,
       };
       if (expense) {
@@ -266,7 +271,21 @@ export default function SharedExpenseScreen() {
             style={styles.input}
             disabled={!editable}
           />
-          <DateField value={date} onChange={setDate} disabled={!editable} />
+          <DateField
+            value={date}
+            onChange={setDate}
+            disabled={!editable}
+            minimumDate={period?.startDate}
+            maximumDate={dayjs().format(DAYJS_STORE_DATE_FORMAT)}
+          />
+          <PaperTextInput
+            mode="outlined"
+            label="Note"
+            value={note}
+            onChangeText={setNote}
+            style={styles.input}
+            disabled={!editable}
+          />
         </Card.Content>
       </Card>
 

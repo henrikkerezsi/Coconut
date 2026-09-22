@@ -95,13 +95,13 @@ export interface Income {
   note: string | null;
 }
 
-export interface YearlySubscription {
+export interface Subscription {
   id: number;
   name: string;
-  yearlyAmountCents: number;
+  totalAmountCents: number;
   monthlyAmountCents: number;
-  startedMonth: MonthKey;
-  billingMonth: MonthKey;
+  startMonth: MonthKey;
+  endMonth: MonthKey;
   deductMonthly: boolean;
   active: boolean;
   sortOrder: number;

@@ -7,7 +7,7 @@ import type {
   MonthFixedExpense,
   ReserveTransfer,
   Transaction,
-  YearlySubscription,
+  Subscription,
 } from '../../src/models';
 import {
   buildMonthlyReport,
@@ -74,14 +74,14 @@ function transaction(budgetId: number | null, amountCents: number): Transaction 
   };
 }
 
-function subscription(partial: Partial<YearlySubscription>): YearlySubscription {
+function subscription(partial: Partial<Subscription>): Subscription {
   return {
     id: 1,
     name: 'Streaming',
-    yearlyAmountCents: 12000,
+    totalAmountCents: 12000,
     monthlyAmountCents: 1000,
-    startedMonth: '2025-01',
-    billingMonth: '2026-01',
+    startMonth: '2025-01',
+    endMonth: '2027-12',
     deductMonthly: true,
     active: true,
     sortOrder: 0,
@@ -166,15 +166,32 @@ describe('subscriptionsChargedInMonth', () => {
       ],
       MONTH_KEY
     );
-    expect(report).toEqual([{ name: 'Active', monthlyCents: 1000, renewalDueThisMonth: false }]);
+    expect(report).toEqual([{ name: 'Active', monthlyCents: 1000 }]);
   });
 
-  it('flags subscriptions whose yearly renewal falls in the month', () => {
+  it('omits subscriptions whose period does not cover the month', () => {
     const report = subscriptionsChargedInMonth(
-      [subscription({ id: 1, name: 'Software', billingMonth: '2026-09' })],
+      [
+        subscription({ id: 1, name: 'Not yet started', startMonth: '2026-10' }),
+        subscription({ id: 2, name: 'Already ended', endMonth: '2026-08' }),
+      ],
       MONTH_KEY
     );
-    expect(report[0].renewalDueThisMonth).toBe(true);
+    expect(report).toEqual([]);
+  });
+
+  it('edges: includes subscriptions starting or ending in the month', () => {
+    const report = subscriptionsChargedInMonth(
+      [
+        subscription({ id: 1, name: 'Starts now', startMonth: '2026-09' }),
+        subscription({ id: 2, name: 'Ends now', endMonth: '2026-09' }),
+      ],
+      MONTH_KEY
+    );
+    expect(report).toEqual([
+      { name: 'Starts now', monthlyCents: 1000 },
+      { name: 'Ends now', monthlyCents: 1000 },
+    ]);
   });
 });
 

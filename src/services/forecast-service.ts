@@ -4,7 +4,7 @@ import type {
   MonthBudget,
   MonthFixedExpense,
   Transaction,
-  YearlySubscription,
+  Subscription,
 } from '../models';
 import { subscriptionTotalCents } from './subscription-service';
 
@@ -82,9 +82,9 @@ export interface MonthForecast {
 }
 
 export interface ForecastInput {
-  month: Pick<Month, 'allowanceCents'>;
+  month: Pick<Month, 'monthKey' | 'allowanceCents'>;
   income?: Income[];
-  subscriptions?: YearlySubscription[];
+  subscriptions?: Subscription[];
   fixedExpenses: MonthFixedExpense[];
   budgets: MonthBudget[];
   transactions: Transaction[];
@@ -93,7 +93,7 @@ export interface ForecastInput {
 /**
  * Builds the forecast for a month. `actualSpendingCents` is the amount of money
  * that is currently accounted for (charged fixed expenses plus entered
- * transactions plus yearly-subscription deductions). `plannedSpendingCents`
+ * transactions plus subscription deductions). `plannedSpendingCents`
  * reflects the original plan (expected fixed expenses plus budget allocations
  * plus subscription deductions). Both are estimates until the month is closed;
  * the caller decides how they are labelled in the UI.
@@ -107,7 +107,7 @@ export function forecastMonth(input: ForecastInput): MonthForecast {
   const income = input.income ?? [];
   const incomeTotalCents = incomeTotal(income);
   const availableCents = month.allowanceCents + incomeTotalCents;
-  const subscriptionTotal = subscriptionTotalCents(input.subscriptions ?? []);
+  const subscriptionTotal = subscriptionTotalCents(input.subscriptions ?? [], input.month.monthKey);
   const fixed = sumFixedExpenses(fixedExpenses);
   const discretionarySpendingCents = transactionTotal(transactions);
   const budgetPlannedTotalCents = budgets.reduce(

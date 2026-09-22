@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { FAB, List, Portal, Text as PaperText, Divider, IconButton } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useAppData } from '../../data/DataProvider';
@@ -10,6 +10,7 @@ import { AmountInput } from '../../components/amount-input';
 import { AppDialog } from '../../components/app-dialog';
 import { useAppTheme } from '../../theme';
 import { FadeIn } from '../../components/fade-in';
+import { DragHandle, ReorderableList } from '../../components/reorderable-list';
 
 export default function FixedExpensesScreen() {
   const router = useRouter();
@@ -20,6 +21,7 @@ export default function FixedExpensesScreen() {
     currentDashboard,
     removeFixedExpense,
     setFixedExpenseActual,
+    reorderFixedExpenses,
   } = useAppData();
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [actualId, setActualId] = useState<number | null>(null);
@@ -38,7 +40,11 @@ export default function FixedExpensesScreen() {
 
   return (
     <>
-      <FlatList
+      <ReorderableList
+        items={allFixedExpenses}
+        keyExtractor={(item) => String(item.id)}
+        rowHeight={72}
+        onReorder={(next) => void reorderFixedExpenses(next.map((expense) => expense.id))}
         ListHeaderComponent={
           <>
             <View style={styles.header}>
@@ -74,10 +80,28 @@ export default function FixedExpensesScreen() {
             <List.Subheader>Definitions</List.Subheader>
           </>
         }
-        data={allFixedExpenses}
-        keyExtractor={(item) => String(item.id)}
-        renderItem={({ item }) => (
-          <FadeIn>
+        ListEmptyComponent={
+          <PaperText variant="bodyMedium" style={styles.empty}>
+            No fixed expenses yet. Add one to plan recurring bills.
+          </PaperText>
+        }
+        renderRow={(item, { isDragged, handleProps }) => (
+          <View
+            style={[
+              styles.definitionRow,
+              isDragged
+                ? {
+                    backgroundColor: theme.colors.surface,
+                    elevation: 4,
+                    shadowColor: '#000000',
+                    shadowOpacity: 0.16,
+                    shadowRadius: 6,
+                    shadowOffset: { width: 0, height: 2 },
+                  }
+                : null,
+            ]}
+          >
+            <DragHandle isDragged={isDragged} handleProps={handleProps} label={`Reorder ${item.name}`} />
             <List.Item
               title={item.name}
               titleNumberOfLines={1}
@@ -94,15 +118,11 @@ export default function FixedExpensesScreen() {
                 </View>
               )}
               onPress={() => router.push(`/fixed-expense/${item.id}`)}
+              style={styles.definitionContent}
             />
-          </FadeIn>
+          </View>
         )}
         contentContainerStyle={styles.content}
-        ListEmptyComponent={
-          <PaperText variant="bodyMedium" style={styles.empty}>
-            No fixed expenses yet. Add one to plan recurring bills.
-          </PaperText>
-        }
       />
       {statuses.length > 0 && (
         <Portal>
@@ -201,6 +221,15 @@ const styles = StyleSheet.create({
   rowActions: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  definitionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 72,
+    paddingRight: 8,
+  },
+  definitionContent: {
+    flex: 1,
   },
   fab: {
     position: 'absolute',

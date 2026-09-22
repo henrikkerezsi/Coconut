@@ -4,7 +4,7 @@ import type {
   MonthBudget,
   MonthFixedExpense,
   Transaction,
-  YearlySubscription,
+  Subscription,
 } from '../../src/models';
 import {
   budgetStatus,
@@ -67,15 +67,15 @@ function income(amountCents: number): Income {
 }
 
 function subscription(
-  overrides: Partial<YearlySubscription> = {}
-): YearlySubscription {
+  overrides: Partial<Subscription> = {}
+): Subscription {
   return {
     id: 1,
     name: 'Streaming',
-    yearlyAmountCents: 12000,
+    totalAmountCents: 12000,
     monthlyAmountCents: 1000,
-    startedMonth: '2025-03',
-    billingMonth: '2024-04',
+    startMonth: '2025-03',
+    endMonth: '2026-09',
     deductMonthly: true,
     active: true,
     sortOrder: 0,
@@ -232,6 +232,30 @@ describe('forecastMonth', () => {
     const forecast = forecastMonth({
       month: month(),
       subscriptions: [subscription({ monthlyAmountCents: 1000, deductMonthly: false })],
+      fixedExpenses: [],
+      budgets: [],
+      transactions: [],
+    });
+    expect(forecast.subscriptionTotalCents).toBe(0);
+    expect(forecast.actualSpendingCents).toBe(0);
+  });
+
+  it('does not deduct a subscription that starts after the forecast month', () => {
+    const forecast = forecastMonth({
+      month: month(),
+      subscriptions: [subscription({ startMonth: '2026-10', endMonth: '2027-09' })],
+      fixedExpenses: [],
+      budgets: [],
+      transactions: [],
+    });
+    expect(forecast.subscriptionTotalCents).toBe(0);
+    expect(forecast.actualSpendingCents).toBe(0);
+  });
+
+  it('does not deduct a subscription whose period has ended', () => {
+    const forecast = forecastMonth({
+      month: month(),
+      subscriptions: [subscription({ startMonth: '2025-01', endMonth: '2026-08' })],
       fixedExpenses: [],
       budgets: [],
       transactions: [],

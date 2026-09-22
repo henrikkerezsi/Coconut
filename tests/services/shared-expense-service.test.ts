@@ -160,6 +160,9 @@ describe('validateExpense', () => {
       { memberId: 1, amountCents: 5000 },
       { memberId: 2, amountCents: 5000 },
     ],
+    date: '2026-09-25',
+    periodStart: '2026-09-20',
+    today: '2026-09-30',
   };
 
   it('accepts a well-formed expense', () => {
@@ -196,6 +199,25 @@ describe('validateExpense', () => {
         ],
       })
     ).toEqual({ ok: false, error: 'Split references an unknown member.' });
+  });
+
+  it('rejects a date before the period start', () => {
+    expect(validateExpense({ ...base, date: '2026-09-19' })).toEqual({
+      ok: false,
+      error: 'The date cannot be before the period start.',
+    });
+  });
+
+  it('rejects a date in the future', () => {
+    expect(validateExpense({ ...base, date: '2026-10-01' })).toEqual({
+      ok: false,
+      error: 'The date cannot be in the future.',
+    });
+  });
+
+  it('accepts the period start date and today', () => {
+    expect(validateExpense({ ...base, date: '2026-09-20' })).toEqual({ ok: true });
+    expect(validateExpense({ ...base, date: '2026-09-30' })).toEqual({ ok: true });
   });
 });
 

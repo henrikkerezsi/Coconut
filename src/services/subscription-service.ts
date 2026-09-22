@@ -1,4 +1,4 @@
-import type { MonthKey, YearlySubscription } from '../models';
+import type { MonthKey, Subscription } from '../models';
 
 interface MonthParts {
   year: number;
@@ -10,10 +10,7 @@ function parseMonthKey(monthKey: MonthKey): MonthParts {
   return { year, month };
 }
 
-function monthKeyFrom(parts: MonthParts): MonthKey {
-  return `${String(parts.year)}-${String(parts.month).padStart(2, '0')}`;
-}
-
+/** Whole months between two keys (negative when `from` is after `to`). */
 function monthsBetween(from: MonthKey, to: MonthKey): number {
   const start = parseMonthKey(from);
   const end = parseMonthKey(to);
@@ -21,54 +18,42 @@ function monthsBetween(from: MonthKey, to: MonthKey): number {
 }
 
 /**
- * The amount a subscription charges the current month: its monthly amount when
- * it is active and configured to be deducted each month, otherwise zero.
+ * The amount a subscription charges the given month: its monthly amount when
+ * it is active, deducted monthly, and the month falls inside its start/end
+ * period. Otherwise zero.
  */
-export function monthlyChargeCents(subscription: YearlySubscription): number {
+export function monthlyChargeCents(subscription: Subscription, monthKey: MonthKey): number {
   if (!subscription.active || !subscription.deductMonthly) {
+    return 0;
+  }
+  if (monthKey < subscription.startMonth || monthKey > subscription.endMonth) {
     return 0;
   }
   return subscription.monthlyAmountCents;
 }
 
-/** Total monthly deduction across a set of subscriptions. */
-export function subscriptionTotalCents(subscriptions: YearlySubscription[]): number {
-  return subscriptions.reduce((total, subscription) => total + monthlyChargeCents(subscription), 0);
-}
-
-/** Whole months between the start of the subscription and the reference month. */
-export function monthsHeld(
-  subscription: YearlySubscription,
-  referenceMonth: MonthKey
+/** Total monthly deduction across a set of subscriptions for a given month. */
+export function subscriptionTotalCents(
+  subscriptions: Subscription[],
+  monthKey: MonthKey
 ): number {
-  return Math.max(0, monthsBetween(subscription.startedMonth, referenceMonth));
+  return subscriptions.reduce(
+    (total, subscription) => total + monthlyChargeCents(subscription, monthKey),
+    0
+  );
 }
 
-/**
- * The month of the next yearly charge, based on the billing month of the year.
- * Returns the reference month itself when the charge happens in that month.
- */
-export function nextChargeMonth(
-  subscription: YearlySubscription,
-  referenceMonth: MonthKey
-): MonthKey {
-  const reference = parseMonthKey(referenceMonth);
-  let candidate = monthKeyFrom({ year: reference.year, month: parseMonthKey(subscription.billingMonth).month });
-  if (candidate < referenceMonth) {
-    candidate = monthKeyFrom({ year: reference.year + 1, month: parseMonthKey(subscription.billingMonth).month });
+/** Whole months the subscription covers, including both its start and end month. */
+export function subscriptionMonths(
+  subscription: Pick<Subscription, 'startMonth' | 'endMonth'>
+): number {
+  return monthsBetween(subscription.startMonth, subscription.endMonth) + 1;
+}
+
+/** The monthly equivalent of a total spread evenly across the period, rounded to cents. */
+export function monthlyFromTotal(totalAmountCents: number, months: number): number {
+  if (months <= 0) {
+    return 0;
   }
-  return candidate;
-}
-
-/** Whole months until the next yearly charge; zero when it happens this month. */
-export function monthsUntilNextCharge(
-  subscription: YearlySubscription,
-  referenceMonth: MonthKey
-): number {
-  return Math.max(0, monthsBetween(referenceMonth, nextChargeMonth(subscription, referenceMonth)));
-}
-
-/** The monthly equivalent of the yearly price, rounded to whole cents. */
-export function monthlyFromYearly(yearlyAmountCents: number): number {
-  return Math.round(yearlyAmountCents / 12);
+  return Math.round(totalAmountCents / months);
 }

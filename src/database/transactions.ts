@@ -157,6 +157,39 @@ export async function getTransactionByOrigin(
   return row ? rowToTransaction(row) : null;
 }
 
+export async function updateTransactionAttachment(
+  id: number,
+  attachment: Attachment | null,
+  db?: SQLiteDatabase
+): Promise<void> {
+  const database = db ?? (await getDatabase());
+  await database.runAsync(
+    'UPDATE transactions SET attachment_name = ?, attachment_mime = ?, attachment = ? WHERE id = ?',
+    [attachment?.name ?? null, attachment?.mime ?? null, attachment?.bytes ?? null, id]
+  );
+}
+
+export async function updateTransactionBudget(
+  id: number,
+  budgetId: number | null,
+  db?: SQLiteDatabase
+): Promise<void> {
+  const database = db ?? (await getDatabase());
+  await database.runAsync('UPDATE transactions SET budget_id = ? WHERE id = ?', [budgetId, id]);
+}
+
+export async function getLatestBudgetForMerchant(
+  merchant: string,
+  db?: SQLiteDatabase
+): Promise<number | null> {
+  const database = db ?? (await getDatabase());
+  const row = await database.getFirstAsync<{ budget_id: number | null }>(
+    'SELECT budget_id FROM transactions WHERE merchant = ? ORDER BY id DESC LIMIT 1',
+    [merchant]
+  );
+  return row?.budget_id ?? null;
+}
+
 export async function upsertSharedTransaction(
   originId: string,
   input: TransactionInput,
@@ -168,10 +201,19 @@ export async function upsertSharedTransaction(
     [originId]
   );
   if (existing) {
-    await updateTransaction(existing.id, input, database);
+    // Keep the locally-attached file and the user-chosen budget untouched when
+    // re-deriving the linked transaction; both are editable on the mirror and
+    // must survive shared-expense changes.
+    const monthKey = monthKeyOf(input.date);
+    await database.runAsync(
+      `UPDATE transactions SET month_key = ?, date = ?, amount_cents = ?, merchant = ?, note = ?
+       WHERE id = ?`,
+      [monthKey, input.date, input.amountCents, input.merchant, input.note, existing.id]
+    );
     return existing.id;
   }
   const monthKey = monthKeyOf(input.date);
+  const budgetId = input.budgetId ?? (await getLatestBudgetForMerchant(input.merchant, database));
   const result = await database.runAsync(
     `INSERT INTO transactions
        (month_key, date, amount_cents, budget_id, merchant, note, attachment_name, attachment_mime, attachment, origin_type, origin_id)
@@ -180,7 +222,7 @@ export async function upsertSharedTransaction(
       monthKey,
       input.date,
       input.amountCents,
-      input.budgetId,
+      budgetId,
       input.merchant,
       input.note,
       input.attachment?.name ?? null,

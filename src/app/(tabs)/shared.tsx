@@ -52,7 +52,6 @@ import {
 } from '../../database/sharedExpenses';
 import { reconcileSharedTransactions } from '../../database/sharedLinking';
 import { pullSharedChanges } from '../../sync/shared';
-import { syncSharedChanges } from '../../sync/engine';
 import { buildPeriodReport } from '../../services/shared-expense-service';
 import { SharedHeaderMenu } from '../../components/shared-header-menu';
 import { AppDialog } from '../../components/app-dialog';
@@ -66,7 +65,7 @@ interface ExpenseSection {
 }
 
 export default function SharedScreen() {
-  const { ready, refresh, settings } = useAppData();
+  const { ready, refresh, syncSharedAndRefresh, settings } = useAppData();
   const theme = useAppTheme();
   const router = useRouter();
 
@@ -144,14 +143,14 @@ export default function SharedScreen() {
   const handlePullRefresh = useCallback(async (): Promise<void> => {
     setSyncing(true);
     try {
-      await syncSharedChanges();
+      await syncSharedAndRefresh();
     } catch {
       setToast('Could not sync with the shared space');
     } finally {
       setSyncing(false);
       await reload();
     }
-  }, [reload]);
+  }, [reload, syncSharedAndRefresh]);
 
   const memberNames = useMemo(
     () => new Map(members.map((member) => [member.id, sharedMemberName(member)])),
@@ -573,7 +572,9 @@ export default function SharedScreen() {
               return (
                 <List.Item
                   title={expense.description}
-                  description={`Paid by ${memberNames.get(expense.paidByMemberId) ?? 'someone'}`}
+                  description={`Paid by ${memberNames.get(expense.paidByMemberId) ?? 'someone'}${
+                    expense.note ? ` • ${expense.note}` : ''
+                  }`}
                   left={(props) => <List.Icon {...props} icon="cash" />}
                   right={() => (
                     <View style={styles.right}>

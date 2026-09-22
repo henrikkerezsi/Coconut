@@ -7,6 +7,7 @@ import React, {
   useState,
 } from 'react';
 import type {
+  Attachment,
   Budget,
   FixedExpense,
   Income,
@@ -16,9 +17,9 @@ import type {
   MonthKey,
   ReserveTransfer,
   Settings,
+  Subscription,
   SyncState,
   Transaction,
-  YearlySubscription,
 } from '../models';
 import { currentMonthKey } from '../utils/date';
 import { getDatabase } from '../database/database';
@@ -39,6 +40,7 @@ import {
   createFixedExpense,
   deleteFixedExpense as deleteFixedExpenseRow,
   getAllFixedExpenses,
+  reorderFixedExpenses,
   setMonthFixedExpenseActual,
   updateFixedExpense as updateFixedExpenseRow,
 } from '../database/fixedExpenses';
@@ -46,6 +48,7 @@ import {
   createBudget,
   deleteBudget as deleteBudgetRow,
   getAllBudgets,
+  reorderBudgets,
   setMonthBudgetPlanned,
   updateBudget as updateBudgetRow,
 } from '../database/budgets';
@@ -55,6 +58,8 @@ import {
   getTransaction,
   getRecentTransactions,
   updateTransaction as updateTransactionRow,
+  updateTransactionAttachment,
+  updateTransactionBudget,
   type TransactionInput,
 } from '../database/transactions';
 import {
@@ -64,12 +69,13 @@ import {
   type IncomeInput,
 } from '../database/income';
 import {
-  createYearlySubscription,
-  deleteYearlySubscription as deleteYearlySubscriptionRow,
-  getAllYearlySubscriptions,
-  updateYearlySubscription as updateYearlySubscriptionRow,
-  type YearlySubscriptionInput,
-} from '../database/yearlySubscriptions';
+  createSubscription,
+  deleteSubscription as deleteSubscriptionRow,
+  getAllSubscriptions,
+  reorderSubscriptions,
+  updateSubscription as updateSubscriptionRow,
+  type SubscriptionInput,
+} from '../database/subscriptions';
 import {
   createReserveTransfer,
   deleteReserveTransfer,
@@ -106,7 +112,7 @@ export interface MonthDashboard {
   fixedExpenseStatuses: FixedExpenseWithStatus[];
   transactions: Transaction[];
   income: Income[];
-  subscriptions: YearlySubscription[];
+  subscriptions: Subscription[];
   budgetNames: Map<number, string>;
   budgetColors: Map<number, string | null>;
 }
@@ -120,7 +126,7 @@ interface AppData {
   currentDashboard: MonthDashboard | null;
   allFixedExpenses: FixedExpense[];
   budgets: Budget[];
-  allSubscriptions: YearlySubscription[];
+  allSubscriptions: Subscription[];
   allMonths: Month[];
   dashboardFor: (monthKey: MonthKey) => Promise<MonthDashboard | null>;
   setMonthlyAllowance: (cents: number) => Promise<void>;
@@ -134,13 +140,17 @@ interface AppData {
   addFixedExpense: (input: Omit<FixedExpense, 'id'>) => Promise<void>;
   saveFixedExpense: (id: number, input: Omit<FixedExpense, 'id'>) => Promise<void>;
   removeFixedExpense: (id: number) => Promise<void>;
+  reorderFixedExpenses: (orderedIds: number[]) => Promise<void>;
   setFixedExpenseActual: (monthFixedExpenseId: number, actualCents: number | null) => Promise<void>;
   addBudget: (input: Omit<Budget, 'id'>) => Promise<void>;
   saveBudget: (id: number, input: Omit<Budget, 'id'>) => Promise<void>;
   removeBudget: (id: number) => Promise<void>;
+  reorderBudgets: (orderedIds: number[]) => Promise<void>;
   setBudgetPlanned: (monthBudgetId: number, plannedCents: number) => Promise<void>;
   addTransaction: (input: TransactionInput) => Promise<void>;
   saveTransaction: (id: number, input: TransactionInput) => Promise<void>;
+  saveTransactionAttachment: (id: number, attachment: Attachment | null) => Promise<void>;
+  saveTransactionBudget: (id: number, budgetId: number | null) => Promise<void>;
   removeTransaction: (id: number) => Promise<void>;
   suggestBudgets: (merchant: string) => Promise<MerchantSuggestion[]>;
   addReserveTransfer: (
@@ -152,12 +162,14 @@ interface AppData {
   addIncome: (input: IncomeInput) => Promise<void>;
   saveIncome: (id: number, input: IncomeInput) => Promise<void>;
   removeIncome: (id: number) => Promise<void>;
-  addYearlySubscription: (input: YearlySubscriptionInput) => Promise<void>;
-  saveYearlySubscription: (id: number, input: YearlySubscriptionInput) => Promise<void>;
-  removeYearlySubscription: (id: number) => Promise<void>;
+  addSubscription: (input: SubscriptionInput) => Promise<void>;
+  saveSubscription: (id: number, input: SubscriptionInput) => Promise<void>;
+  removeSubscription: (id: number) => Promise<void>;
+  reorderSubscriptions: (orderedIds: number[]) => Promise<void>;
   closeCurrentMonth: () => Promise<void>;
   reopenCurrentMonth: () => Promise<void>;
   refresh: () => Promise<void>;
+  syncSharedAndRefresh: () => Promise<void>;
 }
 
 const DataContext = createContext<AppData | null>(null);
@@ -214,11 +226,15 @@ async function buildDashboard(monthKey: MonthKey): Promise<MonthDashboard | null
       status: budgetStatus(monthBudget.plannedAmountCents, spent),
     });
   }
+  budgetStatuses.sort((a, b) => a.budget.sortOrder - b.budget.sortOrder || a.budget.id - b.budget.id);
 
   const fixedExpenseStatuses: FixedExpenseWithStatus[] = fixedExpenses.map((instance) => ({
     instance,
     expense: fixedMap.get(instance.fixedExpenseId) ?? null,
   }));
+  fixedExpenseStatuses.sort(
+    (a, b) => (a.expense?.sortOrder ?? 0) - (b.expense?.sortOrder ?? 0)
+  );
 
   return {
     monthKey,
@@ -257,10 +273,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
   const [allFixedExpenses, setAllFixedExpenses] = useState<FixedExpense[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
-  const [allSubscriptions, setAllSubscriptions] = useState<YearlySubscription[]>([]);
+  const [allSubscriptions, setAllSubscriptions] = useState<Subscription[]>([]);
   const [allMonths, setAllMonths] = useState<Month[]>([]);
 
-  const refresh = useCallback(async () => {
+  const loadLocal = useCallback(async () => {
     const db = await getDatabase();
     await ensureCurrentMonth(db);
 
@@ -274,13 +290,37 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setRecentTransactions(await getRecentTransactions(nextSettings.recentTransactionsCount, db));
     setAllFixedExpenses(await getAllFixedExpenses(db));
     setBudgets(await getAllBudgets(db));
-    setAllSubscriptions(await getAllYearlySubscriptions(db));
+    setAllSubscriptions(await getAllSubscriptions(db));
     setAllMonths(await getAllMonths(db));
-    // Keep shared groups in step with other members cheaply: push local shared
-    // changes and pull anything new, without the heavy whole-database resync
-    // (that stays available in Settings for emergencies).
-    void syncSharedChanges().catch(() => undefined);
   }, []);
+
+  const refresh = useCallback(async () => {
+    // Re-read the personal dataset, then keep shared groups in step with other
+    // members cheaply in the background: push local shared changes and pull
+    // anything new, without the heavy whole-database resync (that stays
+    // available in Settings for emergencies). Once the sync lands, read the
+    // personal dataset again so re-derived mirrors appear without a restart.
+    await loadLocal();
+    const synced = syncSharedChanges();
+    void synced
+      .then((outcome) => {
+        if (outcome) {
+          return loadLocal();
+        }
+        return undefined;
+      })
+      .catch(() => undefined);
+  }, [loadLocal]);
+
+  // Pull-to-refresh entry point for the shared tab: sync the shared tables
+  // (push + pull + reconcile mirrors) and then re-read the personal dataset so
+  // mirrored amounts updated on another device show up immediately.
+  const syncSharedAndRefresh = useCallback(async () => {
+    const outcome = await syncSharedChanges();
+    if (outcome) {
+      await loadLocal();
+    }
+  }, [loadLocal]);
 
   useEffect(() => {
     let active = true;
@@ -378,6 +418,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         await deleteFixedExpenseRow(id, db);
         await refresh();
       },
+      reorderFixedExpenses: async (orderedIds) => {
+        const db = await getDatabase();
+        await reorderFixedExpenses(orderedIds, db);
+        await refresh();
+      },
       setFixedExpenseActual: async (monthFixedExpenseId, actualCents) => {
         const db = await getDatabase();
         await setMonthFixedExpenseActual(monthFixedExpenseId, actualCents, db);
@@ -400,6 +445,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         await deleteBudgetRow(id, db);
         await refresh();
       },
+      reorderBudgets: async (orderedIds) => {
+        const db = await getDatabase();
+        await reorderBudgets(orderedIds, db);
+        await refresh();
+      },
       setBudgetPlanned: async (monthBudgetId, plannedCents) => {
         const db = await getDatabase();
         await setMonthBudgetPlanned(monthBudgetId, plannedCents, db);
@@ -419,6 +469,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         }
         await updateTransactionRow(id, input, db);
         await upsertMerchantSuggestion(input.merchant, input.budgetId, db);
+        await refresh();
+      },
+      saveTransactionAttachment: async (id, attachment) => {
+        const db = await getDatabase();
+        await updateTransactionAttachment(id, attachment, db);
+        await refresh();
+      },
+      saveTransactionBudget: async (id, budgetId) => {
+        const db = await getDatabase();
+        await updateTransactionBudget(id, budgetId, db);
         await refresh();
       },
       removeTransaction: async (id) => {
@@ -456,20 +516,25 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         await deleteIncomeRow(id, db);
         await refresh();
       },
-      addYearlySubscription: async (input) => {
+      addSubscription: async (input) => {
         const db = await getDatabase();
         const sortOrder = allSubscriptions.length;
-        await createYearlySubscription({ ...input, sortOrder }, db);
+        await createSubscription({ ...input, sortOrder }, db);
         await refresh();
       },
-      saveYearlySubscription: async (id, input) => {
+      saveSubscription: async (id, input) => {
         const db = await getDatabase();
-        await updateYearlySubscriptionRow(id, input, db);
+        await updateSubscriptionRow(id, input, db);
         await refresh();
       },
-      removeYearlySubscription: async (id) => {
+      removeSubscription: async (id) => {
         const db = await getDatabase();
-        await deleteYearlySubscriptionRow(id, db);
+        await deleteSubscriptionRow(id, db);
+        await refresh();
+      },
+      reorderSubscriptions: async (orderedIds) => {
+        const db = await getDatabase();
+        await reorderSubscriptions(orderedIds, db);
         await refresh();
       },
       closeCurrentMonth: async () => {
@@ -485,8 +550,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         await refresh();
       },
       refresh,
+      syncSharedAndRefresh,
     };
-  }, [ready, settings, syncState, recentTransactions, currentMonth, currentDashboard, allFixedExpenses, budgets, allSubscriptions, allMonths, refresh]);
+  }, [ready, settings, syncState, recentTransactions, currentMonth, currentDashboard, allFixedExpenses, budgets, allSubscriptions, allMonths, refresh, syncSharedAndRefresh]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

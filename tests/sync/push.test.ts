@@ -63,10 +63,10 @@ const REMOTE_COLUMNS: Record<string, string[]> = {
     'uuid',
     'user_id',
     'name',
-    'yearly_amount_cents',
+    'total_amount_cents',
     'monthly_amount_cents',
-    'started_month',
-    'billing_month',
+    'start_month',
+    'end_month',
     'deduct_monthly',
     'active',
     'sort_order',
@@ -412,8 +412,8 @@ describe('pushChanges full-sync seeding and healing', () => {
         .run().lastInsertRowid
     );
     db.exec(
-      `INSERT INTO yearly_subscriptions (name, yearly_amount_cents, monthly_amount_cents, started_month, billing_month)
-       VALUES ('Insurance', 120000, 10000, '2026-01', '2026-06')`
+      `INSERT INTO yearly_subscriptions (name, total_amount_cents, monthly_amount_cents, start_month, end_month)
+       VALUES ('Insurance', 120000, 10000, '2026-01', '2026-12')`
     );
     db.exec(
       `INSERT INTO month_fixed_expenses (month_key, fixed_expense_id, expected_amount_cents)

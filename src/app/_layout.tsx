@@ -68,6 +68,10 @@ function ThemedContent() {
           <Stack.Screen name="shared/report/[id]" options={{ title: 'Shared Report' }} />
           <Stack.Screen name="shared/balances" options={{ title: 'Balances' }} />
           <Stack.Screen name="whats-new" options={{ title: "What's New", headerShown: false }} />
+          <Stack.Screen
+            name="budget-transactions/[budgetId]"
+            options={{ title: 'Budget Transactions', presentation: 'modal' }}
+          />
           <Stack.Screen name="monthly-history" options={{ title: 'Monthly History' }} />
           <Stack.Screen name="monthly-report/[monthKey]" options={{ title: 'Monthly Report' }} />
           <Stack.Screen

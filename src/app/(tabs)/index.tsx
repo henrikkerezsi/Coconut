@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { KeyboardAwareScrollView } from '../../components/keyboard-aware-scroll-view';
-import { Button, Card, FAB, List, ProgressBar, Text } from 'react-native-paper';
+import { Button, Card, FAB, List, ProgressBar, Text, TouchableRipple } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useAppData } from '../../data/DataProvider';
 import { formatCents } from '../../utils/currency';
@@ -225,20 +225,31 @@ export default function OverviewScreen() {
               const over = status.remainingCents < 0;
               const fraction = status.plannedCents > 0 ? status.spentCents / status.plannedCents : status.spentCents > 0 ? 1 : 0;
               return (
-                <View key={budget.id} style={styles.budgetRow}>
-                  <View style={styles.row}>
-                    <Text variant="bodyMedium">{budget.name}</Text>
-                    <Text variant="bodySmall" style={{ color: over ? theme.semantic.overBudget : theme.colors.onSurfaceVariant }}>
-                      {formatCents(status.spentCents, symbol)} / {formatCents(status.plannedCents, symbol)}
-                      {over ? ' • over' : ''}
-                    </Text>
+                <TouchableRipple
+                  key={budget.id}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/budget-transactions/[budgetId]',
+                      params: { budgetId: String(budget.id) },
+                    })
+                  }
+                  style={[styles.budgetRow, { borderRadius: theme.radii.medium }]}
+                >
+                  <View>
+                    <View style={styles.row}>
+                      <Text variant="bodyMedium">{budget.name}</Text>
+                      <Text variant="bodySmall" style={{ color: over ? theme.semantic.overBudget : theme.colors.onSurfaceVariant }}>
+                        {formatCents(status.spentCents, symbol)} / {formatCents(status.plannedCents, symbol)}
+                        {over ? ' • over' : ''}
+                      </Text>
+                    </View>
+                    <ProgressBar
+                      progress={Math.min(fraction, 1)}
+                      color={over ? theme.semantic.overBudget : undefined}
+                      style={styles.progress}
+                    />
                   </View>
-                  <ProgressBar
-                    progress={Math.min(fraction, 1)}
-                    color={over ? theme.semantic.overBudget : undefined}
-                    style={styles.progress}
-                  />
-                </View>
+                </TouchableRipple>
               );
             })
           )}

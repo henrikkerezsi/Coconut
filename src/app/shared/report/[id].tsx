@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { KeyboardAwareScrollView } from '../../../components/keyboard-aware-scroll-view';
 import {
   ActivityIndicator,
   Card,
@@ -78,7 +79,7 @@ export default function SharedReportScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <KeyboardAwareScrollView contentContainerStyle={styles.container}>
       <Card mode="elevated" style={styles.card}>
         <Card.Title
           title={data.spaceName}
@@ -151,7 +152,7 @@ export default function SharedReportScreen() {
           ) : null}
         </Card.Content>
       </Card>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

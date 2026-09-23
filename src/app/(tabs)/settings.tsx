@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { KeyboardAwareScrollView } from '../../components/keyboard-aware-scroll-view';
 import { useRouter } from 'expo-router';
 import { List, Portal, Switch, Text } from 'react-native-paper';
 import { useAppData } from '../../data/DataProvider';
@@ -58,7 +59,7 @@ export default function SettingsScreen() {
   const symbol = settings.currencySymbol;
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <KeyboardAwareScrollView contentContainerStyle={styles.container}>
       <List.Section>
         <List.Subheader>Money</List.Subheader>
         <List.Item
@@ -262,7 +263,7 @@ export default function SettingsScreen() {
           </AppDialog.Actions>
         </AppDialog>
       </Portal>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { KeyboardAwareScrollView } from '../../components/keyboard-aware-scroll-view';
 import { Card, List, ProgressBar, Text } from 'react-native-paper';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useAppData } from '../../data/DataProvider';
@@ -54,7 +55,7 @@ export default function StatisticsScreen() {
 
   return (
     <ScreenFade>
-      <ScrollView contentContainerStyle={styles.container}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.container}>
       <View style={styles.statRow}>
         <StatCard
           label="Avg spending / month"
@@ -156,7 +157,7 @@ export default function StatisticsScreen() {
           )}
         </Card.Content>
       </Card>
-    </ScrollView>
+    </KeyboardAwareScrollView>
     </ScreenFade>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { KeyboardAwareScrollView } from '../../components/keyboard-aware-scroll-view';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Button, Card, List, Portal, Text } from 'react-native-paper';
 import type { Attachment, Transaction } from '../../models';
@@ -107,7 +108,7 @@ export default function EditTransactionScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <KeyboardAwareScrollView contentContainerStyle={styles.container}>
       {trace ? (
         <Card mode="outlined" style={styles.sharedCard}>
           <Card.Title
@@ -209,7 +210,7 @@ export default function EditTransactionScreen() {
           </AppDialog.Actions>
         </AppDialog>
       </Portal>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

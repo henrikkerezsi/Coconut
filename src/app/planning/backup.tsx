@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { KeyboardAwareScrollView } from '../../components/keyboard-aware-scroll-view';
 import { Button, Card, List, Portal, Text as PaperText } from 'react-native-paper';
 import { useAppData } from '../../data/DataProvider';
 import { LoadingScreen } from '../../components/loading-screen';
@@ -18,7 +19,7 @@ export default function BackupScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <KeyboardAwareScrollView contentContainerStyle={styles.container}>
       <Card mode="elevated" style={styles.card}>
         <Card.Title title="Export backup" />
         <Card.Content>
@@ -127,7 +128,7 @@ export default function BackupScreen() {
       />
 
       <ScreenToast visible={toast !== null} message={toast} onDismiss={() => setToast(null)} />
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

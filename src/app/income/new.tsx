@@ -1,5 +1,6 @@
 import React from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { KeyboardAwareScrollView } from '../../components/keyboard-aware-scroll-view';
 import { useRouter } from 'expo-router';
 import { useAppData } from '../../data/DataProvider';
 import { IncomeForm } from '../../components/income-form';
@@ -9,7 +10,7 @@ export default function NewIncomeScreen() {
   const router = useRouter();
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <KeyboardAwareScrollView contentContainerStyle={styles.container}>
       <IncomeForm
         symbol={settings.currencySymbol}
         onSubmit={async (input) => {
@@ -17,7 +18,7 @@ export default function NewIncomeScreen() {
           router.back();
         }}
       />
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

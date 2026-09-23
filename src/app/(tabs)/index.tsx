@@ -1,5 +1,6 @@
 import React from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { KeyboardAwareScrollView } from '../../components/keyboard-aware-scroll-view';
 import { Button, Card, FAB, List, ProgressBar, Text } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useAppData } from '../../data/DataProvider';
@@ -37,7 +38,7 @@ export default function OverviewScreen() {
   return (
     <ScreenFade>
       <View style={styles.screen}>
-        <ScrollView contentContainerStyle={styles.container}>
+        <KeyboardAwareScrollView contentContainerStyle={styles.container}>
       <View style={styles.brandRow}>
         <CoconutLogo size={28} />
         <Text
@@ -296,7 +297,7 @@ export default function OverviewScreen() {
           )}
         </Card.Content>
       </Card>
-      </ScrollView>
+      </KeyboardAwareScrollView>
       <FAB icon="plus" style={styles.fab} onPress={() => router.push('/transaction/new')} />
       </View>
     </ScreenFade>

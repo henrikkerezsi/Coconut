@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { KeyboardAwareScrollView } from '../../components/keyboard-aware-scroll-view';
 import {
   ActivityIndicator,
   Card,
@@ -77,7 +78,7 @@ export default function SharedBalancesScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <KeyboardAwareScrollView contentContainerStyle={styles.container}>
       <Card mode="elevated" style={styles.card}>
         <Card.Title title={space?.name ?? 'Balances'} subtitle="Current period" />
         <Card.Content style={styles.cardContent}>
@@ -136,7 +137,7 @@ export default function SharedBalancesScreen() {
           ) : null}
         </Card.Content>
       </Card>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

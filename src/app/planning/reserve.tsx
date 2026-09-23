@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { KeyboardAwareScrollView } from '../../components/keyboard-aware-scroll-view';
 import { Button, Card, List, Portal, SegmentedButtons, TextInput, IconButton } from 'react-native-paper';
 import { useAppData } from '../../data/DataProvider';
 import { getMonthTransfers } from '../../database/reserve';
@@ -52,7 +53,7 @@ export default function ReserveScreen() {
   const adjustment = projection.adjustmentCents;
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <KeyboardAwareScrollView contentContainerStyle={styles.container}>
       <View style={styles.statRow}>
         <StatCard
           label="Starting reserve"
@@ -254,7 +255,7 @@ export default function ReserveScreen() {
       </Portal>
 
       <ScreenToast visible={toast !== null} message={toast} onDismiss={() => setToast(null)} duration={2000} />
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

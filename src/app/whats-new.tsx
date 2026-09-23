@@ -1,5 +1,6 @@
 import React from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { KeyboardAwareScrollView } from '../components/keyboard-aware-scroll-view';
 import { useRouter } from 'expo-router';
 import { Appbar, Text } from 'react-native-paper';
 import dayjs from 'dayjs';
@@ -16,7 +17,7 @@ export default function WhatsNewScreen() {
         <Appbar.BackAction onPress={() => router.back()} />
         <Appbar.Content title="What's New" />
       </Appbar.Header>
-      <ScrollView contentContainerStyle={styles.container}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.container}>
         {whatsNew.map((entry, index) => {
           const releasedLabel =
             entry.releasedAt === ''
@@ -60,7 +61,7 @@ export default function WhatsNewScreen() {
             </View>
           );
         })}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </>
   );
 }

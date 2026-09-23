@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleSheet, ScrollView } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { KeyboardAwareScrollView } from '../../components/keyboard-aware-scroll-view';
 import { useRouter } from 'expo-router';
 import { useAppData } from '../../data/DataProvider';
 import { TransactionForm } from '../../components/transaction-form';
@@ -9,7 +10,7 @@ export default function NewTransactionScreen() {
   const router = useRouter();
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <KeyboardAwareScrollView contentContainerStyle={styles.container}>
       <TransactionForm
         budgets={budgets}
         symbol={settings.currencySymbol}
@@ -19,7 +20,7 @@ export default function NewTransactionScreen() {
           router.back();
         }}
       />
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

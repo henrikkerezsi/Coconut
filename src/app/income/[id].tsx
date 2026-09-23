@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { KeyboardAwareScrollView } from '../../components/keyboard-aware-scroll-view';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Button } from 'react-native-paper';
 import type { Income } from '../../models';
@@ -29,7 +30,7 @@ export default function EditIncomeScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <KeyboardAwareScrollView contentContainerStyle={styles.container}>
       <IncomeForm
         initial={income}
         symbol={settings.currencySymbol}
@@ -49,7 +50,7 @@ export default function EditIncomeScreen() {
           Delete one-off income
         </Button>
       </View>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

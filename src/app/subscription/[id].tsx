@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { KeyboardAwareScrollView } from '../../components/keyboard-aware-scroll-view';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Appbar, Button } from 'react-native-paper';
 import { useAppData } from '../../data/DataProvider';
@@ -30,7 +31,7 @@ export default function EditSubscriptionScreen() {
       {loading ? (
         <LoadingScreen />
       ) : (
-        <ScrollView contentContainerStyle={styles.container}>
+        <KeyboardAwareScrollView contentContainerStyle={styles.container}>
           <SubscriptionForm
             initialData={subscription}
             currencySymbol={settings.currencySymbol}
@@ -59,7 +60,7 @@ export default function EditSubscriptionScreen() {
               Delete subscription
             </Button>
           </View>
-        </ScrollView>
+        </KeyboardAwareScrollView>
       )}
     </>
   );

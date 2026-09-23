@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { KeyboardAwareScrollView } from '../../components/keyboard-aware-scroll-view';
 import { Card, List, Text } from 'react-native-paper';
 import { useLocalSearchParams } from 'expo-router';
 
@@ -69,11 +70,11 @@ export default function MonthlyReportScreen() {
   }
   if (!report) {
     return (
-      <ScrollView contentContainerStyle={styles.container}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.container}>
         <Text variant="bodyMedium" style={styles.empty}>
           This month has no report yet. Close the month to generate one.
         </Text>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     );
   }
 
@@ -88,7 +89,7 @@ export default function MonthlyReportScreen() {
       : null;
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <KeyboardAwareScrollView contentContainerStyle={styles.container}>
       <Text variant="titleLarge" style={styles.title}>
         {monthLabel(report.monthKey)}
       </Text>
@@ -222,7 +223,7 @@ export default function MonthlyReportScreen() {
           />
         </Card.Content>
       </Card>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

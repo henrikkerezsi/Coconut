@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { KeyboardAwareScrollView } from '../components/keyboard-aware-scroll-view';
 import { Card, List, Text } from 'react-native-paper';
 import { useFocusEffect, useRouter } from 'expo-router';
 
@@ -33,7 +34,7 @@ export default function MonthlyHistoryScreen() {
   const symbol = settings.currencySymbol;
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <KeyboardAwareScrollView contentContainerStyle={styles.container}>
       {records.length === 0 ? (
         <Text variant="bodyMedium" style={styles.empty}>
           Close a month to generate its report here.
@@ -77,7 +78,7 @@ export default function MonthlyHistoryScreen() {
             );
           })
       )}
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

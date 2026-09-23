@@ -1,5 +1,6 @@
 import React from 'react';
-import { ScrollView, StyleSheet, View, Linking, Alert } from 'react-native';
+import { StyleSheet, View, Linking, Alert } from 'react-native';
+import { KeyboardAwareScrollView } from '../components/keyboard-aware-scroll-view';
 import { useRouter } from 'expo-router';
 import { Appbar, List, Text } from 'react-native-paper';
 import dayjs from 'dayjs';
@@ -35,7 +36,7 @@ export default function AboutScreen() {
         <Appbar.BackAction onPress={() => router.back()} />
         <Appbar.Content title="About" />
       </Appbar.Header>
-      <ScrollView contentContainerStyle={styles.container}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.container}>
         <View style={styles.logo}>
           <CoconutLogo size={64} />
         </View>
@@ -78,7 +79,7 @@ export default function AboutScreen() {
           savings reserve. Everything stays on this device only — no network, no account,
           no tracking.
         </Text>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </>
   );
 }

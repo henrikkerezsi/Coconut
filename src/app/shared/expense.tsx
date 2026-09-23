@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Button,
@@ -17,6 +17,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import dayjs from 'dayjs';
 import type { User } from '@supabase/supabase-js';
 import { AppDialog } from '../../components/app-dialog';
+import { KeyboardAwareScrollView } from '../../components/keyboard-aware-scroll-view';
 import { ScreenToast } from '../../components/screen-toast';
 import type {
   SharedExpenseWithSplits,
@@ -313,7 +314,7 @@ export default function SharedExpenseScreen() {
   const closedNotice = !editable ? 'This expense belongs to a closed period and can no longer be changed.' : null;
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <KeyboardAwareScrollView contentContainerStyle={styles.container} keyboardBottomOffset={16}>
       {closedNotice ? (
         <HelperText type="info" visible style={styles.notice}>
           {closedNotice}
@@ -501,7 +502,7 @@ export default function SharedExpenseScreen() {
       </Portal>
 
       <ScreenToast visible={toast !== null} message={toast} onDismiss={() => setToast(null)} />
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { KeyboardAwareScrollView } from '../components/keyboard-aware-scroll-view';
 import {
   Button,
   Card,
@@ -167,7 +168,7 @@ export default function SyncScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <KeyboardAwareScrollView contentContainerStyle={styles.container}>
       <Card mode="elevated" style={styles.card}>
         <Card.Title
           title="Cloud sync"
@@ -440,7 +441,7 @@ export default function SyncScreen() {
       </PaperText>
 
       <ScreenToast visible={toast !== null} message={toast} onDismiss={() => setToast(null)} />
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

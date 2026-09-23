@@ -7,6 +7,37 @@ export interface WhatsNewEntry {
 
 export const whatsNew: WhatsNewEntry[] = [
   {
+    version: '1.0.2',
+    releasedAt: '2026-09-23T00:00:00.000Z',
+    intro:
+      'This update is about fitting your life more precisely into the plan. Budgets are easier ' +
+      'to read and to order, shared expenses finally land in your own budget, and yearly ' +
+      'expenses march to the rhythm of your own calendar. There\u2019s a healthy dose of polish too ' +
+      '\u2014 a split helper that finishes the math for you, a keyboard that stops covering your ' +
+      'fields, and budgets you can tap straight into.',
+    features: [
+      'The "Available" amount on the overview screen no longer overflows out of its bubble \u2014 ' +
+        'it fits neatly and stays readable',
+      'Fresh budget colors, picked to be much easier to tell apart at a glance',
+      'Budgets can now be reordered, and the new order is mirrored everywhere \u2014 overview, ' +
+        'planning and transactions',
+      'Shared expenses now support notes and attachments, just like your personal transactions',
+      'A shared expense can be assigned to one of your personal budgets, so it shows up in ' +
+        'your own planning automatically',
+      'Shared expenses stay inside the group\u2019s period \u2014 you can no longer add entries dated ' +
+        'outside of it',
+      'Yearly expenses follow a flexible time frame, so you decide when the year starts and ends',
+      'Subscriptions were retested end to end, and the rough edges that surfaced are fixed',
+      '"Add rest" for exact and percentage shares \u2014 one tap fills the last share for you ' +
+        'automatically',
+      'The keyboard no longer overlays the fields you\u2019re typing into \u2014 the screen scrolls up so ' +
+        'you always see what you\u2019re entering',
+      'Tap a budget on the overview to see every transaction assigned to it',
+      'When planning a budget you now see how much of your allowance remains after expected ' +
+        'fixed expenses and your other budgets, in both the default and the current month',
+    ],
+  },
+  {
     version: '1.0.1',
     releasedAt: '2026-09-20T00:00:00.000Z',
     intro:

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { FAB, IconButton, List, Portal, Text as PaperText } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useAppData } from '../../data/DataProvider';
 import { formatCents } from '../../utils/currency';
+import { remainingForBudget } from '../../services/allowance-service';
 import { LoadingScreen } from '../../components/loading-screen';
 import { AmountInput } from '../../components/amount-input';
 import { AppDialog } from '../../components/app-dialog';
@@ -19,6 +20,7 @@ export default function BudgetsScreen() {
     ready,
     settings,
     budgets,
+    currentMonth,
     currentDashboard,
     removeBudget,
     setBudgetPlanned,
@@ -124,6 +126,24 @@ export default function BudgetsScreen() {
                 error={plannedError}
               />
               <PaperText variant="bodySmall" style={styles.dialogHint}>
+                <Text style={styles.remainingAmount}>
+                  {formatCents(
+                    remainingForBudget({
+                      allowanceCents: currentMonth?.allowanceCents ?? 0,
+                      expectedFixedExpensesCents:
+                        currentDashboard?.forecast.fixedExpectedTotalCents ?? 0,
+                      budgets: statuses.map((entry) => ({
+                        id: entry.budget.id,
+                        amountCents: entry.plannedCents,
+                      })),
+                      excludeBudgetId: planned.budget.id,
+                    }),
+                    symbol
+                  )}
+                </Text>{' '}
+                remaining from allowance (including expected fixed expenses and other budgets, excluding this budget).
+              </PaperText>
+              <PaperText variant="bodySmall" style={styles.dialogHint}>
                 Only affects the current month.
               </PaperText>
             </AppDialog.Content>
@@ -213,6 +233,9 @@ const styles = StyleSheet.create({
   dialogHint: {
     marginTop: 8,
     opacity: 0.6,
+  },
+  remainingAmount: {
+    fontWeight: '700',
   },
   definitionRow: {
     flexDirection: 'row',

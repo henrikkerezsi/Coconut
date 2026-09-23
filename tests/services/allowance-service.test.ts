@@ -1,5 +1,6 @@
 import {
   remainingAllowance,
+  remainingForBudget,
   reserveAdjustmentCents,
   spendingDifference,
   unplannedAllowance,
@@ -68,5 +69,75 @@ describe('reserveAdjustmentCents', () => {
 describe('unplannedAllowance', () => {
   it('subtracts committed spending from the allowance', () => {
     expect(unplannedAllowance(50000, 15000)).toBe(35000);
+  });
+});
+
+describe('remainingForBudget', () => {
+  const budgets = [
+    { id: 1, amountCents: 20000 },
+    { id: 2, amountCents: 15000 },
+    { id: 3, amountCents: 5000 },
+  ];
+
+  it('subtracts expected fixed expenses and the other budgets from the allowance', () => {
+    const result = remainingForBudget({
+      allowanceCents: 100000,
+      expectedFixedExpensesCents: 30000,
+      budgets,
+      excludeBudgetId: 1,
+    });
+    expect(result).toBe(50000);
+  });
+
+  it('ignores one-off income (only the allowance is the base)', () => {
+    const result = remainingForBudget({
+      allowanceCents: 40000,
+      expectedFixedExpensesCents: 10000,
+      budgets: [{ id: 1, amountCents: 5000 }],
+      excludeBudgetId: 1,
+    });
+    expect(result).toBe(30000);
+  });
+
+  it('deducts all other budgets when no budget is excluded', () => {
+    const result = remainingForBudget({
+      allowanceCents: 100000,
+      expectedFixedExpensesCents: 0,
+      budgets,
+    });
+    expect(result).toBe(60000);
+  });
+
+  it('deducts nothing for budgets when the list is empty', () => {
+    const result = remainingForBudget({
+      allowanceCents: 100000,
+      expectedFixedExpensesCents: 30000,
+      budgets: [],
+      excludeBudgetId: 7,
+    });
+    expect(result).toBe(70000);
+  });
+
+  it('goes negative when committed plans exceed the allowance', () => {
+    const result = remainingForBudget({
+      allowanceCents: 30000,
+      expectedFixedExpensesCents: 25000,
+      budgets: [
+        { id: 1, amountCents: 20000 },
+        { id: 2, amountCents: 10000 },
+      ],
+      excludeBudgetId: 1,
+    });
+    expect(result).toBe(-5000);
+  });
+
+  it('excludes the budget being edited even when it is the only budget', () => {
+    const result = remainingForBudget({
+      allowanceCents: 50000,
+      expectedFixedExpensesCents: 0,
+      budgets: [{ id: 9, amountCents: 40000 }],
+      excludeBudgetId: 9,
+    });
+    expect(result).toBe(50000);
   });
 });

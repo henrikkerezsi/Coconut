@@ -41,3 +41,26 @@ export function reserveAdjustmentCents(
 export function unplannedAllowance(allowanceCents: number, committedCents: number): number {
   return allowanceCents - committedCents;
 }
+
+export interface RemainingForBudgetInput {
+  allowanceCents: number;
+  expectedFixedExpensesCents: number;
+  budgets: readonly { id: number; amountCents: number }[];
+  excludeBudgetId?: number;
+}
+
+/**
+ * Allowance left over after committed plans, for a single budget being
+ * planned: the monthly allowance minus expected fixed expenses minus every
+ * other budget's planned amount. One-off income is deliberately excluded, and
+ * the budget being edited is never deducted (its own amount is not yet final).
+ */
+export function remainingForBudget(input: RemainingForBudgetInput): number {
+  const otherBudgetsCents = input.budgets.reduce((sum, budget) => {
+    if (budget.id === input.excludeBudgetId) {
+      return sum;
+    }
+    return sum + budget.amountCents;
+  }, 0);
+  return input.allowanceCents - input.expectedFixedExpensesCents - otherBudgetsCents;
+}

@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Button, List, Switch, Text, TextInput } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { Budget } from '../models';
+import { formatCents } from '../utils/currency';
 import { AmountInput } from './amount-input';
 import { useAppTheme } from '../theme';
 
@@ -12,10 +13,17 @@ interface Props {
   initialData: Budget | null;
   currencySymbol: string;
   submitting: boolean;
+  remainingCents?: number;
   onSubmit: (draft: BudgetDraft) => void;
 }
 
-export function BudgetForm({ initialData, currencySymbol, submitting, onSubmit }: Props) {
+export function BudgetForm({
+  initialData,
+  currencySymbol,
+  submitting,
+  remainingCents,
+  onSubmit,
+}: Props) {
   const [name, setName] = useState(initialData?.name ?? '');
   const [defaultAmountCents, setDefaultAmountCents] = useState<number | null>(
     initialData?.defaultAmountCents ?? null
@@ -65,6 +73,12 @@ export function BudgetForm({ initialData, currencySymbol, submitting, onSubmit }
         prefix={currencySymbol}
         error={amountError}
       />
+      {remainingCents !== undefined ? (
+        <Text variant="bodySmall" style={styles.remainingHint}>
+          Remaining from allowance (including expected fixed expenses and other budgets, excluding this budget):{' '}
+          <Text style={styles.remainingAmount}>{formatCents(remainingCents, currencySymbol)}</Text>
+        </Text>
+      ) : null}
       <Text variant="labelLarge" style={styles.colorLabel}>
         Color
       </Text>
@@ -141,6 +155,14 @@ const styles = StyleSheet.create({
   },
   field: {
     marginBottom: 16,
+  },
+  remainingHint: {
+    marginTop: 8,
+    marginBottom: 8,
+    opacity: 0.6,
+  },
+  remainingAmount: {
+    fontWeight: '700',
   },
   colorLabel: {
     marginTop: 16,

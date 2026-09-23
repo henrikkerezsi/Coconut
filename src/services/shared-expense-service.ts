@@ -152,6 +152,56 @@ export function resolveSplit(
   return resolvePercentageSplit(totalCents, inputs);
 }
 
+export type FillRemainingResult =
+  | { ok: true; memberId: number; value: number }
+  | { ok: false; error: string };
+
+function remainingSplitTarget(
+  method: SharedSplitMethod,
+  totalCents: number,
+  inputs: SharedSplitInput[]
+): { targetMemberId: number; remaining: number } | null {
+  if (method === 'equal') {
+    return null;
+  }
+  const field = method === 'exact' ? 'amountCents' : 'basisPoints';
+  const totalValue = method === 'exact' ? totalCents : PERCENT_SCALE;
+  const active = inputs.filter((input) => input.selected !== false);
+  const empty = active.filter((input) => (input[field] ?? 0) === 0);
+  if (empty.length !== 1) {
+    return null;
+  }
+  const entered = active.reduce((sum, input) => sum + (input[field] ?? 0), 0);
+  const remaining = totalValue - entered;
+  if (remaining <= 0) {
+    return null;
+  }
+  return { targetMemberId: empty[empty.length - 1].memberId, remaining };
+}
+
+export function canFillRemaining(
+  method: SharedSplitMethod,
+  totalCents: number,
+  inputs: SharedSplitInput[]
+): boolean {
+  return remainingSplitTarget(method, totalCents, inputs) !== null;
+}
+
+export function fillRemainingSplit(
+  method: SharedSplitMethod,
+  totalCents: number,
+  inputs: SharedSplitInput[]
+): FillRemainingResult {
+  const target = remainingSplitTarget(method, totalCents, inputs);
+  if (target === null) {
+    return {
+      ok: false,
+      error: 'Add rest is only available when exactly one member is left empty.',
+    };
+  }
+  return { ok: true, memberId: target.targetMemberId, value: target.remaining };
+}
+
 export function validateExpense(params: {
   totalCents: number;
   description: string;

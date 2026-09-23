@@ -42,6 +42,8 @@ import {
 import { reconcileSharedTransactions } from '../../database/sharedLinking';
 import { deriveSplitPrefill } from '../../utils/shared-expense-prefill';
 import {
+  canFillRemaining,
+  fillRemainingSplit,
   parsePercentToBasisPoints,
   resolveSplit,
   validateExpense,
@@ -53,6 +55,30 @@ function memberName(member: SharedSpaceMember): string {
 
 function centsToInput(totalCents: number): string {
   return (totalCents / 100).toString();
+}
+
+function centsToAmountString(cents: number): string {
+  const integer = Math.floor(cents / 100);
+  const fraction = cents % 100;
+  if (fraction === 0) {
+    return `${integer}`;
+  }
+  if (fraction % 10 === 0) {
+    return `${integer}.${Math.floor(fraction / 10)}`;
+  }
+  return `${integer}.${fraction.toString().padStart(2, '0')}`;
+}
+
+function basisPointsToPercentString(basisPoints: number): string {
+  const whole = Math.floor(basisPoints / 100);
+  const fraction = basisPoints % 100;
+  if (fraction === 0) {
+    return `${whole}`;
+  }
+  if (fraction % 10 === 0) {
+    return `${whole}.${Math.floor(fraction / 10)}`;
+  }
+  return `${whole}.${fraction.toString().padStart(2, '0')}`;
 }
 
 export default function SharedExpenseScreen() {
@@ -156,6 +182,47 @@ export default function SharedExpenseScreen() {
     });
     return resolveSplit(method, totalCents, inputs);
   }, [members, method, selected, exact, percent, totalCents]);
+
+  const inputsForRest = useMemo((): SharedSplitInput[] => {
+    if (method === 'equal') {
+      return [];
+    }
+    return members.map((member) =>
+      method === 'exact'
+        ? {
+            memberId: member.id,
+            amountCents: centsFromString(exact[member.id] ?? '') ?? 0,
+          }
+        : {
+            memberId: member.id,
+            basisPoints: parsePercentToBasisPoints(percent[member.id] ?? '') ?? 0,
+          }
+    );
+  }, [members, method, exact, percent]);
+
+  const showAddRest = useMemo(
+    () => canFillRemaining(method, totalCents, inputsForRest),
+    [method, totalCents, inputsForRest]
+  );
+
+  function handleAddRest(): void {
+    const result = fillRemainingSplit(method, totalCents, inputsForRest);
+    if (!result.ok) {
+      setToast(result.error);
+      return;
+    }
+    if (method === 'exact') {
+      setExact((current) => ({
+        ...current,
+        [result.memberId]: centsToAmountString(result.value),
+      }));
+    } else {
+      setPercent((current) => ({
+        ...current,
+        [result.memberId]: basisPointsToPercentString(result.value),
+      }));
+    }
+  }
 
   async function handleSave(): Promise<void> {
     if (!sessionUser) {
@@ -324,6 +391,18 @@ export default function SharedExpenseScreen() {
             ]}
           />
           <Divider style={styles.divider} />
+          {editable && showAddRest ? (
+            <View style={styles.restRow}>
+              <Button
+                mode="outlined"
+                compact
+                icon="plus"
+                onPress={handleAddRest}
+              >
+                Add rest
+              </Button>
+            </View>
+          ) : null}
           {members.map((member) => {
             const resolved = preview.ok
               ? preview.splits.find((split) => split.memberId === member.id)?.amountCents ?? 0
@@ -455,6 +534,11 @@ const styles = StyleSheet.create({
   },
   divider: {
     marginVertical: 8,
+  },
+  restRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 4,
   },
   memberRow: {
     flexDirection: 'row',

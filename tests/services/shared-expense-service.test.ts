@@ -1,6 +1,8 @@
 import {
   buildPeriodReport,
+  canFillRemaining,
   computeBalances,
+  fillRemainingSplit,
   formatBasisPoints,
   parsePercentToBasisPoints,
   resolveEqualSplit,
@@ -146,6 +148,135 @@ describe('resolveSplit', () => {
         { memberId: 1, amountCents: 4500 },
         { memberId: 3, amountCents: 4500 },
       ],
+    });
+  });
+});
+
+describe('canFillRemaining', () => {
+  it('is true when exactly one exact amount is left empty', () => {
+    expect(
+      canFillRemaining('exact', 10000, [
+        { memberId: 1, amountCents: 2000 },
+        { memberId: 2, amountCents: 0 },
+      ])
+    ).toBe(true);
+  });
+
+  it('is true when exactly one percentage is left empty', () => {
+    expect(
+      canFillRemaining('percentage', 10000, [
+        { memberId: 1, basisPoints: 5000 },
+        { memberId: 2, basisPoints: 0 },
+      ])
+    ).toBe(true);
+  });
+
+  it('is false when no member is empty', () => {
+    expect(
+      canFillRemaining('exact', 10000, [
+        { memberId: 1, amountCents: 2000 },
+        { memberId: 2, amountCents: 8000 },
+      ])
+    ).toBe(false);
+  });
+
+  it('is false when more than one member is empty', () => {
+    expect(
+      canFillRemaining('exact', 10000, [
+        { memberId: 1, amountCents: 2000 },
+        { memberId: 2, amountCents: 0 },
+        { memberId: 3, amountCents: 0 },
+      ])
+    ).toBe(false);
+  });
+
+  it('is false for equal splits', () => {
+    expect(canFillRemaining('equal', 10000, [{ memberId: 1 }])).toBe(false);
+  });
+
+  it('is false when entered values already cover the total', () => {
+    expect(
+      canFillRemaining('exact', 10000, [
+        { memberId: 1, amountCents: 10000 },
+        { memberId: 2, amountCents: 0 },
+      ])
+    ).toBe(false);
+  });
+
+  it('is false when entered values exceed the total', () => {
+    expect(
+      canFillRemaining('exact', 10000, [
+        { memberId: 1, amountCents: 6000 },
+        { memberId: 2, amountCents: 6000 },
+        { memberId: 3, amountCents: 0 },
+      ])
+    ).toBe(false);
+  });
+
+  it('ignores inactive members', () => {
+    expect(
+      canFillRemaining('exact', 10000, [
+        { memberId: 1, amountCents: 2000, selected: false },
+        { memberId: 2, amountCents: 0 },
+      ])
+    ).toBe(true);
+  });
+});
+
+describe('fillRemainingSplit', () => {
+  it('fills the exact remainder into the single empty member', () => {
+    const result = fillRemainingSplit('exact', 10000, [
+      { memberId: 1, amountCents: 2000 },
+      { memberId: 2, amountCents: 0 },
+    ]);
+    expect(result).toEqual({ ok: true, memberId: 2, value: 8000 });
+  });
+
+  it('fills the empty first member when the last already has an amount', () => {
+    const result = fillRemainingSplit('exact', 10000, [
+      { memberId: 1, amountCents: 0 },
+      { memberId: 2, amountCents: 2000 },
+    ]);
+    expect(result).toEqual({ ok: true, memberId: 1, value: 8000 });
+  });
+
+  it('fills the percentage remainder into the single empty member', () => {
+    const result = fillRemainingSplit('percentage', 10000, [
+      { memberId: 1, basisPoints: 4000 },
+      { memberId: 2, basisPoints: 0 },
+    ]);
+    expect(result).toEqual({ ok: true, memberId: 2, value: 6000 });
+  });
+
+  it('rejects when no member is empty', () => {
+    expect(
+      fillRemainingSplit('exact', 10000, [
+        { memberId: 1, amountCents: 2000 },
+        { memberId: 2, amountCents: 8000 },
+      ])
+    ).toEqual({
+      ok: false,
+      error: 'Add rest is only available when exactly one member is left empty.',
+    });
+  });
+
+  it('rejects when more than one member is empty', () => {
+    expect(
+      fillRemainingSplit('exact', 10000, [
+        { memberId: 1, amountCents: 2000 },
+        { memberId: 2, amountCents: 0 },
+        { memberId: 3, amountCents: 0 },
+      ])
+    ).toEqual({
+      ok: false,
+      error: 'Add rest is only available when exactly one member is left empty.',
+    });
+  });
+
+  it('rejects the equal method', () => {
+    expect(fillRemainingSplit('equal', 10000, [{ memberId: 1 }])).toEqual({
+      ok: false,
+      error: 'Add rest is only available when exactly one member is left empty.',
     });
   });
 });

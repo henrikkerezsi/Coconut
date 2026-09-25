@@ -42,18 +42,29 @@ export function unplannedAllowance(allowanceCents: number, committedCents: numbe
   return allowanceCents - committedCents;
 }
 
+/**
+ * Whether the month's spending has drawn from the reserve at least as much as
+ * the plan expected. A draw is positive when money goes into the reserve, so
+ * adding to it, or drawing less than planned, is still on track.
+ */
+export function reserveDrawBehindPlan(plannedDrawCents: number, actualDrawCents: number): boolean {
+  return actualDrawCents < 0 && actualDrawCents <= plannedDrawCents;
+}
+
 export interface RemainingForBudgetInput {
   allowanceCents: number;
   expectedFixedExpensesCents: number;
+  subscriptionCents?: number;
   budgets: readonly { id: number; amountCents: number }[];
   excludeBudgetId?: number;
 }
 
 /**
  * Allowance left over after committed plans, for a single budget being
- * planned: the monthly allowance minus expected fixed expenses minus every
- * other budget's planned amount. One-off income is deliberately excluded, and
- * the budget being edited is never deducted (its own amount is not yet final).
+ * planned: the monthly allowance minus expected fixed expenses minus this
+ * month's subscription deductions minus every other budget's planned amount.
+ * One-off income is deliberately excluded, and the budget being edited is never
+ * deducted (its own amount is not yet final).
  */
 export function remainingForBudget(input: RemainingForBudgetInput): number {
   const otherBudgetsCents = input.budgets.reduce((sum, budget) => {
@@ -62,5 +73,10 @@ export function remainingForBudget(input: RemainingForBudgetInput): number {
     }
     return sum + budget.amountCents;
   }, 0);
-  return input.allowanceCents - input.expectedFixedExpensesCents - otherBudgetsCents;
+  return (
+    input.allowanceCents -
+    input.expectedFixedExpensesCents -
+    (input.subscriptionCents ?? 0) -
+    otherBudgetsCents
+  );
 }

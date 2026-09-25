@@ -1,12 +1,14 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { KeyboardAwareScrollView } from '../../components/keyboard-aware-scroll-view';
-import { Button, Card, FAB, List, ProgressBar, Text, TouchableRipple } from 'react-native-paper';
+import { Button, Card, FAB, List, Text, TouchableRipple } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useAppData } from '../../data/DataProvider';
-import { formatCents } from '../../utils/currency';
-import { currentMonthKey, EVERGREEN_MONTH_KEY, monthLabel, relativeDayLabel } from '../../utils/date';
+import { formatCents, formatSignedCents } from '../../utils/currency';
+import { currentMonthKey, EVERGREEN_MONTH_KEY, monthLabel, monthProgress, relativeDayLabel } from '../../utils/date';
 import { StatCard, type Tone } from '../../components/stat-card';
+import { reserveDrawBehindPlan } from '../../services/allowance-service';
+import { MonthProgressBar } from '../../components/month-progress-bar';
 import { LoadingScreen } from '../../components/loading-screen';
 import { CoconutLogo } from '../../components/coconut-logo';
 import { useAppTheme } from '../../theme';
@@ -15,7 +17,7 @@ import { FadeIn } from '../../components/fade-in';
 import { AnimatedNumber } from '../../components/animated-number';
 
 export default function OverviewScreen() {
-  const { ready, settings, recentTransactions, currentDashboard, currentMonth } = useAppData();
+  const { ready, settings, recentTransactions, currentDashboard, currentMonth, allSubscriptions } = useAppData();
   const theme = useAppTheme();
   const router = useRouter();
 
@@ -29,11 +31,18 @@ export default function OverviewScreen() {
   const { forecast, reserveProjection, budgetStatuses, fixedExpenseStatuses, income, subscriptions } = currentDashboard;
   const symbol = settings.currencySymbol;
   const reserved = currentMonth.isClosed;
+  const subscriptionById = new Map(allSubscriptions.map((entry) => [entry.id, entry]));
 
-  const remaining = forecast.remainingAllowanceCents;
-  const remainingTone: Tone = remaining < 0 ? 'bad' : remaining === 0 ? 'neutral' : 'good';
-  const adjustmentTone: Tone =
-    reserveProjection.adjustmentCents > 0 ? 'good' : reserveProjection.adjustmentCents < 0 ? 'bad' : 'neutral';
+  const remaining = forecast.remainingVsPlanCents;
+  const elapsed = monthProgress();
+  const remainingTone: Tone = remaining < 0 ? 'bad' : 'good';
+  const plannedDraw = forecast.allowanceVsPlanCents;
+  const actualDraw = forecast.remainingAllowanceCents;
+  const behindPlan = reserveDrawBehindPlan(plannedDraw, actualDraw);
+  const transferNote =
+    reserveProjection.transferNetCents > 0
+      ? `${formatCents(reserveProjection.transferNetCents, symbol)} moved to the reserve`
+      : `${formatCents(-reserveProjection.transferNetCents, symbol)} moved to the month`;
 
   return (
     <ScreenFade>
@@ -58,30 +67,44 @@ export default function OverviewScreen() {
             Savings Reserve
           </Text>
           <View style={styles.reserveRow}>
-            <Text variant="bodyMedium">{reserved ? 'Month closed' : 'Projected month end'}</Text>
-            <AnimatedNumber value={reserveProjection.endingReserveCents} format={(v) => formatCents(v, symbol)} />
-          </View>
-          <View style={styles.reserveRow}>
             <Text variant="bodyMedium">Starting reserve</Text>
             <Text variant="bodyMedium">{formatCents(reserveProjection.startingReserveCents, symbol)}</Text>
           </View>
           <View style={styles.reserveRow}>
-            <Text variant="bodyMedium">Reserve adjustment</Text>
-            <Text variant="bodyMedium" style={{ color: adjustmentTone === 'bad' ? theme.semantic.overBudget : adjustmentTone === 'good' ? theme.semantic.goodBudget : undefined }}>
-              {reserveProjection.adjustmentCents > 0 ? '+' : ''}
-              {formatCents(reserveProjection.adjustmentCents, symbol)}
+            <Text variant="bodyMedium">Planned draw</Text>
+            <Text variant="bodyMedium">{formatSignedCents(plannedDraw, symbol)}</Text>
+          </View>
+          <View style={styles.reserveRow}>
+            <Text variant="bodyMedium">Draw so far</Text>
+            <Text
+              variant="bodyMedium"
+              style={{ color: behindPlan ? theme.semantic.overBudget : theme.semantic.goodBudget }}
+            >
+              {formatSignedCents(actualDraw, symbol)}
             </Text>
           </View>
+          <View style={styles.reserveRow}>
+            <Text variant="bodyMedium">{reserved ? 'Month closed' : 'Projected month end'}</Text>
+            <AnimatedNumber
+              value={reserveProjection.endingReserveBeforeTransfersCents}
+              format={(v) => formatCents(v, symbol)}
+            />
+          </View>
+          {reserveProjection.transferNetCents !== 0 ? (
+            <Text variant="labelSmall" style={styles.reserveNote}>
+              {`Projected without manual transfers: ${transferNote}`}
+            </Text>
+          ) : null}
         </Card.Content>
       </Card>
 
       <View style={styles.statRow}>
-        <StatCard label="Allowance" value={forecast.allowanceCents} format={(v) => formatCents(v, symbol)} />
-        <StatCard label="One-off income" value={forecast.incomeTotalCents} format={(v) => formatCents(v, symbol)} tone="good" />
+        <StatCard label="Planned spending" value={forecast.plannedSpendingCents} format={(v) => formatCents(v, symbol)} />
+        <StatCard label="Available" value={forecast.availableCents} format={(v) => formatCents(v, symbol)} />
       </View>
       <View style={styles.statRow}>
         <StatCard label="Actual spent" value={forecast.actualSpendingCents} format={(v) => formatCents(v, symbol)} />
-        <StatCard label="Remaining" value={remaining} format={(v) => formatCents(v, symbol)} tone={remainingTone} sub={remaining < 0 ? 'Over what is available' : null} />
+        <StatCard label="Remaining" value={remaining} format={(v) => formatCents(v, symbol)} tone={remainingTone} sub={remaining < 0 ? 'Over plan' : null} />
       </View>
 
       {subscriptions.length > 0 && (
@@ -91,32 +114,36 @@ export default function OverviewScreen() {
           subtitle={`${formatCents(forecast.subscriptionTotalCents, symbol)} deducted this month`}
         />
         <Card.Content>
-          {subscriptions.map((subscription) => {
-            const period =
-              subscription.endMonth === EVERGREEN_MONTH_KEY
+          {subscriptions.map((charge) => {
+            const subscription =
+              charge.subscriptionId !== null
+                ? subscriptionById.get(charge.subscriptionId) ?? null
+                : null;
+            const period = subscription
+              ? subscription.endMonth === EVERGREEN_MONTH_KEY
                 ? 'Ongoing'
-                : `${monthLabel(subscription.startMonth)} \u2013 ${monthLabel(subscription.endMonth)}`;
+                : `${monthLabel(subscription.startMonth)} \u2013 ${monthLabel(subscription.endMonth)}`
+              : 'No longer active';
             return (
-              <FadeIn key={subscription.id}>
+              <FadeIn key={charge.id}>
                 <List.Item
-                  title={subscription.name}
-                  description={
-                    subscription.deductMonthly
-                      ? `Deducted monthly \u00b7 ${period}`
-                      : period
-                  }
+                  title={subscription?.name ?? charge.name}
+                  description={`Deducted monthly \u00b7 ${period}`}
                   left={(props) => <List.Icon {...props} icon="calendar-refresh" />}
                   right={() => (
                     <Text variant="bodyLarge">
-                      {formatCents(subscription.monthlyAmountCents, symbol)}
+                      {formatCents(charge.amountCents, symbol)}
                     </Text>
                   )}
                   style={[styles.transactionRow, { borderRadius: theme.radii.medium }]}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/subscription/[id]',
-                      params: { id: String(subscription.id) },
-                    })
+                  onPress={
+                    subscription
+                      ? () =>
+                          router.push({
+                            pathname: '/subscription/[id]',
+                            params: { id: String(subscription.id) },
+                          })
+                      : undefined
                   }
                 />
               </FadeIn>
@@ -125,26 +152,6 @@ export default function OverviewScreen() {
         </Card.Content>
       </Card>
       )}
-
-      <Card mode="elevated" style={styles.card} contentStyle={styles.cardContent}>
-        <Card.Title title="Planned vs Available" />
-        <Card.Content>
-          <View style={styles.row}>
-            <Text variant="bodyMedium">Planned spending</Text>
-            <Text variant="bodyMedium">{formatCents(forecast.plannedSpendingCents, symbol)}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text variant="bodyMedium">Available</Text>
-            <Text variant="bodyMedium">{formatCents(forecast.availableCents, symbol)}</Text>
-          </View>
-          <Text variant="labelSmall" style={styles.subNote}>
-            allowance + one-off income
-          </Text>
-          <Text variant="bodySmall" style={styles.hint}>
-            Planned spending may exceed what is available; that is expected, not an error.
-          </Text>
-        </Card.Content>
-      </Card>
 
       <Card mode="elevated" style={styles.card} contentStyle={styles.cardContent}>
         <Card.Title
@@ -243,10 +250,10 @@ export default function OverviewScreen() {
                         {over ? ' • over' : ''}
                       </Text>
                     </View>
-                    <ProgressBar
-                      progress={Math.min(fraction, 1)}
+                    <MonthProgressBar
+                      progress={fraction}
+                      monthProgress={elapsed}
                       color={over ? theme.semantic.overBudget : undefined}
-                      style={styles.progress}
                     />
                   </View>
                 </TouchableRipple>
@@ -352,6 +359,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 3,
   },
+  reserveNote: {
+    opacity: 0.6,
+    marginTop: 6,
+  },
   statRow: {
     flexDirection: 'row',
     gap: 8,
@@ -370,26 +381,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 4,
   },
-  hint: {
-    opacity: 0.6,
-    marginTop: 8,
-    fontStyle: 'italic',
-  },
-  subNote: {
-    opacity: 0.6,
-    marginTop: -2,
-    paddingBottom: 4,
-  },
   empty: {
     opacity: 0.6,
     paddingVertical: 8,
   },
   budgetRow: {
     marginVertical: 6,
-  },
-  progress: {
-    marginTop: 4,
-    borderRadius: 4,
   },
   transactionRight: {
     alignItems: 'flex-end',

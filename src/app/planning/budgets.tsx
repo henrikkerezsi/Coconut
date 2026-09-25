@@ -132,6 +132,8 @@ export default function BudgetsScreen() {
                       allowanceCents: currentMonth?.allowanceCents ?? 0,
                       expectedFixedExpensesCents:
                         currentDashboard?.forecast.fixedExpectedTotalCents ?? 0,
+                      subscriptionCents:
+                        currentDashboard?.forecast.subscriptionTotalCents ?? 0,
                       budgets: statuses.map((entry) => ({
                         id: entry.budget.id,
                         amountCents: entry.plannedCents,
@@ -141,7 +143,7 @@ export default function BudgetsScreen() {
                     symbol
                   )}
                 </Text>{' '}
-                remaining from allowance (including expected fixed expenses and other budgets, excluding this budget).
+                remaining from allowance (including expected fixed expenses, subscriptions and other budgets, excluding this budget).
               </PaperText>
               <PaperText variant="bodySmall" style={styles.dialogHint}>
                 Only affects the current month.

@@ -107,6 +107,15 @@ export interface Subscription {
   sortOrder: number;
 }
 
+/** A subscription charge frozen into one month, kept for that month's history. */
+export interface MonthSubscription {
+  id: number;
+  monthKey: MonthKey;
+  subscriptionId: number | null;
+  name: string;
+  amountCents: number;
+}
+
 export interface Attachment {
   name: string;
   mime: string;

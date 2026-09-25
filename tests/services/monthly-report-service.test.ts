@@ -5,17 +5,18 @@ import type {
   Month,
   MonthBudget,
   MonthFixedExpense,
+  MonthSubscription,
   ReserveTransfer,
   Transaction,
-  Subscription,
 } from '../../src/models';
 import {
   buildMonthlyReport,
   reportBudgets,
   reportFixedExpenses,
-  subscriptionsChargedInMonth,
+  reportSubscriptions,
   type MonthlyReportInput,
 } from '../../src/services/monthly-report-service';
+import { forecastMonth } from '../../src/services/forecast-service';
 
 const MONTH_KEY = '2026-09';
 
@@ -74,17 +75,13 @@ function transaction(budgetId: number | null, amountCents: number): Transaction 
   };
 }
 
-function subscription(partial: Partial<Subscription>): Subscription {
+function charge(partial: Partial<MonthSubscription> = {}): MonthSubscription {
   return {
     id: 1,
+    monthKey: MONTH_KEY,
+    subscriptionId: 1,
     name: 'Streaming',
-    totalAmountCents: 12000,
-    monthlyAmountCents: 1000,
-    startMonth: '2025-01',
-    endMonth: '2027-12',
-    deductMonthly: true,
-    active: true,
-    sortOrder: 0,
+    amountCents: 1000,
     ...partial,
   };
 }
@@ -156,42 +153,28 @@ describe('reportFixedExpenses', () => {
   });
 });
 
-describe('subscriptionsChargedInMonth', () => {
-  it('includes only active subscriptions with a monthly deduction', () => {
-    const report = subscriptionsChargedInMonth(
-      [
-        subscription({ id: 1, name: 'Active', monthlyAmountCents: 1000 }),
-        subscription({ id: 2, name: 'Paused', active: false }),
-        subscription({ id: 3, name: 'Yearly only', deductMonthly: false }),
-      ],
-      MONTH_KEY
-    );
-    expect(report).toEqual([{ name: 'Active', monthlyCents: 1000 }]);
-  });
-
-  it('omits subscriptions whose period does not cover the month', () => {
-    const report = subscriptionsChargedInMonth(
-      [
-        subscription({ id: 1, name: 'Not yet started', startMonth: '2026-10' }),
-        subscription({ id: 2, name: 'Already ended', endMonth: '2026-08' }),
-      ],
-      MONTH_KEY
-    );
-    expect(report).toEqual([]);
-  });
-
-  it('edges: includes subscriptions starting or ending in the month', () => {
-    const report = subscriptionsChargedInMonth(
-      [
-        subscription({ id: 1, name: 'Starts now', startMonth: '2026-09' }),
-        subscription({ id: 2, name: 'Ends now', endMonth: '2026-09' }),
-      ],
-      MONTH_KEY
-    );
-    expect(report).toEqual([
-      { name: 'Starts now', monthlyCents: 1000 },
-      { name: 'Ends now', monthlyCents: 1000 },
+describe('reportSubscriptions', () => {
+  it('reports the charges frozen into the month', () => {
+    const report = reportSubscriptions([
+      charge({ id: 1, name: 'Active', amountCents: 1000 }),
+      charge({ id: 2, name: 'Paused', amountCents: 2500 }),
     ]);
+    expect(report).toEqual([
+      { name: 'Active', monthlyCents: 1000 },
+      { name: 'Paused', monthlyCents: 2500 },
+    ]);
+  });
+
+  it('edges: reports charges whose subscription no longer exists', () => {
+    const report = reportSubscriptions([
+      charge({ id: 1, name: 'Deleted', subscriptionId: null, amountCents: 500 }),
+    ]);
+    expect(report).toEqual([{ name: 'Deleted', monthlyCents: 500 }]);
+  });
+
+  it('reports nothing for a month without charges', () => {
+    const report = reportSubscriptions([]);
+    expect(report).toEqual([]);
   });
 });
 
@@ -245,7 +228,7 @@ describe('buildMonthlyReport', () => {
         fixedExpenses: [monthFixedExpense({ fixedExpenseId: 1, expectedAmountCents: 30000 })],
         budgets: [monthBudget(1, 15000)],
         transactions: [transaction(1, 8000)],
-        subscriptions: [subscription({ id: 1, monthlyAmountCents: 500 })],
+        subscriptions: [charge({ id: 1, amountCents: 500 })],
         income: [income(10000)],
         transfers: [transfer('to-reserve', 2000)],
         fixedExpenseDefinitions: { 1: fixedExpense(1, 'Rent') },
@@ -305,5 +288,32 @@ describe('buildMonthlyReport', () => {
     });
     expect(report.budgetSpentTotalCents).toBe(8000);
     expect(report.spendingCents).toBe(8000);
+  });
+
+  it('spends the same as the month forecast for the same data', () => {
+    const monthData = {
+      month: month({ allowanceCents: 200000 }),
+      fixedExpenses: [
+        monthFixedExpense({ fixedExpenseId: 1, expectedAmountCents: 50000, actualAmountCents: 52000 }),
+        monthFixedExpense({ fixedExpenseId: 2, expectedAmountCents: 10000 }),
+      ],
+      budgets: [monthBudget(1, 15000)],
+      transactions: [transaction(1, 3000), transaction(null, 2500)],
+      subscriptions: [charge({ id: 1, amountCents: 3500 })],
+      income: [income(20000)],
+      fixedExpenseDefinitions: { 1: fixedExpense(1, 'Rent'), 2: fixedExpense(2, 'Power') },
+      budgetDefinitions: { 1: budget(1, 'Groceries') },
+    };
+    const report = buildMonthlyReport(input(monthData));
+    const forecast = forecastMonth({
+      month: monthData.month,
+      fixedExpenses: monthData.fixedExpenses,
+      budgets: monthData.budgets,
+      transactions: monthData.transactions,
+      subscriptions: monthData.subscriptions,
+      income: monthData.income,
+    });
+    expect(report.spendingCents).toBe(forecast.actualSpendingCents);
+    expect(report.adjustmentCents).toBe(220000 - forecast.actualSpendingCents);
   });
 });

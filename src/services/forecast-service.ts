@@ -3,10 +3,10 @@ import type {
   Month,
   MonthBudget,
   MonthFixedExpense,
+  MonthSubscription,
   Transaction,
-  Subscription,
 } from '../models';
-import { subscriptionTotalCents } from './subscription-service';
+import { monthSubscriptionTotal } from './subscription-service';
 
 export interface FixedExpenseTotals {
   expectedTotalCents: number;
@@ -77,14 +77,15 @@ export interface MonthForecast {
   discretionarySpendingCents: number;
   budgetPlannedTotalCents: number;
   remainingAllowanceCents: number;
+  remainingVsPlanCents: number;
   expectedAdjustmentCents: number;
-  plannedVsAllowanceCents: number;
+  allowanceVsPlanCents: number;
 }
 
 export interface ForecastInput {
   month: Pick<Month, 'monthKey' | 'allowanceCents'>;
   income?: Income[];
-  subscriptions?: Subscription[];
+  subscriptions?: MonthSubscription[];
   fixedExpenses: MonthFixedExpense[];
   budgets: MonthBudget[];
   transactions: Transaction[];
@@ -101,13 +102,18 @@ export interface ForecastInput {
  * `availableCents` (allowance plus one-off income) is the money the month can
  * draw on. The remaining allowance and the expected reserve adjustment are
  * computed against it, so unspent income stays in the reserve at month end.
+ * `remainingVsPlanCents` is what is left of the plan itself, so subscriptions
+ * count as planned in both directions. `allowanceVsPlanCents` is the planned
+ * reserve draw: the allowance alone against the plan, so one-off income never
+ * makes the plan look better than it is. Subscription amounts come from the
+ * charges frozen into the month, never from the current subscription list.
  */
 export function forecastMonth(input: ForecastInput): MonthForecast {
   const { month, fixedExpenses, budgets, transactions } = input;
   const income = input.income ?? [];
   const incomeTotalCents = incomeTotal(income);
   const availableCents = month.allowanceCents + incomeTotalCents;
-  const subscriptionTotal = subscriptionTotalCents(input.subscriptions ?? [], input.month.monthKey);
+  const subscriptionTotal = monthSubscriptionTotal(input.subscriptions ?? []);
   const fixed = sumFixedExpenses(fixedExpenses);
   const discretionarySpendingCents = transactionTotal(transactions);
   const budgetPlannedTotalCents = budgets.reduce(
@@ -136,7 +142,8 @@ export function forecastMonth(input: ForecastInput): MonthForecast {
     discretionarySpendingCents,
     budgetPlannedTotalCents,
     remainingAllowanceCents: availableCents - actualSpendingCents,
+    remainingVsPlanCents: plannedSpendingCents - actualSpendingCents,
     expectedAdjustmentCents: availableCents - actualSpendingCents,
-    plannedVsAllowanceCents: availableCents - plannedSpendingCents,
+    allowanceVsPlanCents: month.allowanceCents - plannedSpendingCents,
   };
 }

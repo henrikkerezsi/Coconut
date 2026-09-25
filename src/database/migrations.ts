@@ -503,4 +503,35 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_yearly_subscriptions_uuid ON yearly_subscr
 ${syncTriggersSql()}
 `,
   },
+  {
+    id: 13,
+    description: 'Per-month subscription charges',
+    // Snapshot of the subscriptions that charged a month, so closed-month
+    // reports and statistics never change when a subscription is later edited,
+    // deactivated or deleted. Derived from yearly_subscriptions, therefore not
+    // synced: every device materializes its own charges.
+    sql: `
+CREATE TABLE month_subscriptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  month_key TEXT NOT NULL,
+  subscription_id INTEGER,
+  name TEXT NOT NULL,
+  amount_cents INTEGER NOT NULL,
+  FOREIGN KEY (month_key) REFERENCES months (month_key) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_month_subscriptions_month ON month_subscriptions (month_key);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_month_subscriptions_unique
+  ON month_subscriptions (month_key, subscription_id);
+
+INSERT OR IGNORE INTO month_subscriptions (month_key, subscription_id, name, amount_cents)
+SELECT m.month_key, s.id, s.name, s.monthly_amount_cents
+  FROM months m
+  JOIN yearly_subscriptions s
+    ON s.active = 1
+   AND s.deduct_monthly = 1
+   AND m.month_key >= s.start_month
+   AND m.month_key <= s.end_month;
+`,
+  },
 ];

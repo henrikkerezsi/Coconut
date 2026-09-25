@@ -53,6 +53,15 @@ export function relativeDayLabel(isoDate: string, today?: string): string {
   return dayLabel(isoDate);
 }
 
+/**
+ * Share of the month already elapsed, from 0 (first day) to 1 (last day).
+ * The current day counts as elapsed, so the 15th of a 30 day month is 0.5.
+ */
+export function monthProgress(date?: string | Dayjs | Date): number {
+  const day = dayjs(date ?? dayjs());
+  return day.date() / day.daysInMonth();
+}
+
 export function isInMonth(isoDate: string, monthKey: MonthKey): boolean {
   return monthKeyOf(isoDate) === monthKey;
 }

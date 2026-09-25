@@ -7,6 +7,31 @@ export interface WhatsNewEntry {
 
 export const whatsNew: WhatsNewEntry[] = [
   {
+    version: '1.0.3',
+    releasedAt: '2026-09-25T00:00:00.000Z',
+    intro:
+      'The overview screen has been rebuilt around a single question: how are you doing compared ' +
+      'to your own plan? Instead of judging you against your allowance, Coconut now measures you ' +
+      'against what you decided to spend \u2014 so the numbers finally mean something to you. ' +
+      'Two more fixes keep your history honest along the way.',
+    features: [
+      'A slider on every individual budget, marking how far the month has progressed \u2014 so you can ' +
+        'compare how much of the budget is spent against how much of the month is gone',
+      'The four main tiles are now Planned Spending, Available (your allowance plus one-off ' +
+        'income), Actual Spent and Remaining \u2014 where remaining is your plan minus what you have ' +
+        'spent so far, green while you are within the plan and red once you are over it',
+      'The savings reserve tile now shows the starting reserve, the planned draw, the draw so far ' +
+        '\u2014 green while you are within it, even if it is negative, red once you are over \u2014 and the ' +
+        'projected reserve at the end of the month',
+      'The "Planned vs Available" tile is gone: comparing your plan to your money is what the new ' +
+        'tiles do, better',
+      'Subscription charges are now frozen into the month they were charged in, so editing a ' +
+        'subscription no longer skews your older statistics',
+      'Deleting a fixed expense no longer deletes its past data, so your history and averages ' +
+        'stay correct',
+    ],
+  },
+  {
     version: '1.0.2',
     releasedAt: '2026-09-23T00:00:00.000Z',
     intro:

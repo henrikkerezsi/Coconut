@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import dayjs from 'dayjs';
 import { MIGRATIONS } from '../../src/database/migrations';
 import { deleteBudget } from '../../src/database/budgets';
-import { deleteFixedExpense } from '../../src/database/fixedExpenses';
+import { deactivateFixedExpense } from '../../src/database/fixedExpenses';
 
 interface TestDb {
   getFirstAsync<T>(sql: string, params?: unknown[]): Promise<T | null>;
@@ -101,8 +101,8 @@ describe('deleteBudget', () => {
   });
 });
 
-describe('deleteFixedExpense', () => {
-  it('removes the definition and the current-month instance, keeps past months', async () => {
+describe('deactivateFixedExpense', () => {
+  it('keeps the definition and every month instance, and stops future months', async () => {
     const raw = freshDb();
     seedMonth(raw, CURRENT_MONTH);
     seedMonth(raw, PAST_MONTH);
@@ -126,18 +126,19 @@ describe('deleteFixedExpense', () => {
       )
       .run(PAST_MONTH, fixedId, 120000);
 
-    await deleteFixedExpense(fixedId, makeDbApi(raw) as never);
+    await deactivateFixedExpense(fixedId, makeDbApi(raw) as never);
 
     expect(
-      (
-        raw.prepare('SELECT COUNT(*) AS n FROM fixed_expenses WHERE id = ?').get(fixedId) as {
-          n: number;
-        }
-      ).n
+      (raw.prepare('SELECT active FROM fixed_expenses WHERE id = ?').get(fixedId) as {
+        active: number;
+      }).active
     ).toBe(0);
     const remaining = raw
       .prepare('SELECT month_key, actual_amount_cents FROM month_fixed_expenses ORDER BY month_key')
-      .all() as Array<{ month_key: string; actual_amount_cents: number }>;
-    expect(remaining).toEqual([{ month_key: PAST_MONTH, actual_amount_cents: 119900 }]);
+      .all() as Array<{ month_key: string; actual_amount_cents: number | null }>;
+    expect(remaining).toEqual([
+      { month_key: PAST_MONTH, actual_amount_cents: 119900 },
+      { month_key: CURRENT_MONTH, actual_amount_cents: null },
+    ]);
   });
 });

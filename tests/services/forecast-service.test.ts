@@ -3,8 +3,8 @@ import type {
   Month,
   MonthBudget,
   MonthFixedExpense,
+  MonthSubscription,
   Transaction,
-  Subscription,
 } from '../../src/models';
 import {
   budgetStatus,
@@ -40,13 +40,13 @@ function month(overrides: Partial<Month> = {}): Month {
   };
 }
 
-function transaction(amountCents: number): Transaction {
+function transaction(amountCents: number, budgetId: number | null = 1): Transaction {
   return {
     id: 1,
     monthKey: '2026-09',
     date: '2026-09-10',
     amountCents,
-    budgetId: 1,
+    budgetId,
     merchant: 'Test',
     note: null,
     attachmentName: null,
@@ -66,19 +66,13 @@ function income(amountCents: number): Income {
   };
 }
 
-function subscription(
-  overrides: Partial<Subscription> = {}
-): Subscription {
+function charge(overrides: Partial<MonthSubscription> = {}): MonthSubscription {
   return {
     id: 1,
+    monthKey: '2026-09',
+    subscriptionId: 1,
     name: 'Streaming',
-    totalAmountCents: 12000,
-    monthlyAmountCents: 1000,
-    startMonth: '2025-03',
-    endMonth: '2026-09',
-    deductMonthly: true,
-    active: true,
-    sortOrder: 0,
+    amountCents: 1000,
     ...overrides,
   };
 }
@@ -170,9 +164,47 @@ describe('forecastMonth', () => {
     expect(forecast.expectedAdjustmentCents).toBe(50000 - 37000);
   });
 
-  it('reports how planned spending relates to the allowance', () => {
+  it('reports what is left of the plan', () => {
     const forecast = forecastMonth({ month: month(), fixedExpenses: fixed, budgets, transactions });
-    expect(forecast.plannedVsAllowanceCents).toBe(50000 - 50000);
+    expect(forecast.remainingVsPlanCents).toBe(50000 - 37000);
+  });
+
+  it('reports a negative remainder once spending passes the plan', () => {
+    const forecast = forecastMonth({
+      month: month(),
+      fixedExpenses: fixed,
+      budgets,
+      transactions: [transaction(30000), transaction(20000)],
+    });
+    expect(forecast.remainingVsPlanCents).toBe(50000 - 82000);
+  });
+
+  it('keeps subscriptions neutral against the plan', () => {
+    const forecast = forecastMonth({
+      month: month(),
+      subscriptions: [charge({ amountCents: 3500 })],
+      fixedExpenses: fixed,
+      budgets,
+      transactions,
+    });
+    expect(forecast.remainingVsPlanCents).toBe(50000 - 37000);
+  });
+
+  it('reports the planned reserve draw against the allowance alone', () => {
+    const forecast = forecastMonth({ month: month(), fixedExpenses: fixed, budgets, transactions });
+    expect(forecast.allowanceVsPlanCents).toBe(50000 - 50000);
+  });
+
+  it('ignores one-off income in the planned reserve draw', () => {
+    const forecast = forecastMonth({
+      month: month(),
+      income: [income(20000)],
+      fixedExpenses: fixed,
+      budgets,
+      transactions,
+    });
+    expect(forecast.allowanceVsPlanCents).toBe(50000 - 50000);
+    expect(forecast.remainingAllowanceCents).toBe(70000 - 37000);
   });
 
   it('handles a month with no data', () => {
@@ -217,7 +249,7 @@ describe('forecastMonth', () => {
   it('deducts active yearly subscriptions from the month', () => {
     const forecast = forecastMonth({
       month: month(),
-      subscriptions: [subscription({ monthlyAmountCents: 1000 }), subscription({ monthlyAmountCents: 2500 })],
+      subscriptions: [charge({ amountCents: 1000 }), charge({ id: 2, amountCents: 2500 })],
       fixedExpenses: fixed,
       budgets,
       transactions,
@@ -228,10 +260,22 @@ describe('forecastMonth', () => {
     expect(forecast.remainingAllowanceCents).toBe(50000 - 37000 - 3500);
   });
 
-  it('skips subscriptions that are not deducted monthly', () => {
+  it('uses only the subscription charges frozen into the month', () => {
     const forecast = forecastMonth({
       month: month(),
-      subscriptions: [subscription({ monthlyAmountCents: 1000, deductMonthly: false })],
+      subscriptions: [charge({ amountCents: 1000 })],
+      fixedExpenses: [],
+      budgets: [],
+      transactions: [],
+    });
+    expect(forecast.subscriptionTotalCents).toBe(1000);
+    expect(forecast.actualSpendingCents).toBe(1000);
+    expect(forecast.plannedSpendingCents).toBe(1000);
+  });
+
+  it('has no subscription spending when the month holds no charges', () => {
+    const forecast = forecastMonth({
+      month: month(),
       fixedExpenses: [],
       budgets: [],
       transactions: [],
@@ -239,28 +283,51 @@ describe('forecastMonth', () => {
     expect(forecast.subscriptionTotalCents).toBe(0);
     expect(forecast.actualSpendingCents).toBe(0);
   });
+});
 
-  it('does not deduct a subscription that starts after the forecast month', () => {
-    const forecast = forecastMonth({
-      month: month(),
-      subscriptions: [subscription({ startMonth: '2026-10', endMonth: '2027-09' })],
-      fixedExpenses: [],
-      budgets: [],
-      transactions: [],
-    });
-    expect(forecast.subscriptionTotalCents).toBe(0);
-    expect(forecast.actualSpendingCents).toBe(0);
+describe('actual spending covers everything spent', () => {
+  const everything = {
+    month: month({ allowanceCents: 200000 }),
+    income: [income(20000)],
+    subscriptions: [
+      charge({ id: 1, name: 'Streaming', amountCents: 1000 }),
+      charge({ id: 2, name: 'Gym', amountCents: 2500 }),
+    ],
+    fixedExpenses: [
+      instance({ id: 1, fixedExpenseId: 1, expectedAmountCents: 50000, actualAmountCents: 52000 }),
+      instance({ id: 2, fixedExpenseId: 2, expectedAmountCents: 10000, actualAmountCents: null }),
+    ],
+    budgets: [{ id: 1, monthKey: '2026-09', budgetId: 1, plannedAmountCents: 15000 }],
+    transactions: [
+      transaction(3000, 1),
+      transaction(2500, null),
+    ],
+  };
+
+  it('charges every fixed expense, using the actual amount when it is known', () => {
+    const forecast = forecastMonth(everything);
+    expect(forecast.fixedChargedTotalCents).toBe(62000);
   });
 
-  it('does not deduct a subscription whose period has ended', () => {
-    const forecast = forecastMonth({
-      month: month(),
-      subscriptions: [subscription({ startMonth: '2025-01', endMonth: '2026-08' })],
-      fixedExpenses: [],
-      budgets: [],
-      transactions: [],
-    });
-    expect(forecast.subscriptionTotalCents).toBe(0);
-    expect(forecast.actualSpendingCents).toBe(0);
+  it('counts transactions with and without a budget', () => {
+    const forecast = forecastMonth(everything);
+    expect(forecast.discretionarySpendingCents).toBe(5500);
+  });
+
+  it('counts every subscription that charges the month', () => {
+    const forecast = forecastMonth(everything);
+    expect(forecast.subscriptionTotalCents).toBe(3500);
+  });
+
+  it('sums fixed expenses, subscriptions and transactions into actual spending', () => {
+    const forecast = forecastMonth(everything);
+    expect(forecast.actualSpendingCents).toBe(62000 + 3500 + 5500);
+  });
+
+  it('derives available and remaining from the same totals', () => {
+    const forecast = forecastMonth(everything);
+    expect(forecast.availableCents).toBe(220000);
+    expect(forecast.remainingAllowanceCents).toBe(220000 - 71000);
+    expect(forecast.remainingVsPlanCents).toBe(78500 - 71000);
   });
 });

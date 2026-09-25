@@ -7,9 +7,9 @@ import type {
   MonthBudget,
   MonthFixedExpense,
   MonthKey,
+  MonthSubscription,
   ReserveTransfer,
   Transaction,
-  Subscription,
 } from '../models';
 import { getDatabase } from './database';
 import { getMonth, getClosedMonths, getPreviousMonth } from './months';
@@ -17,7 +17,7 @@ import { getAllBudgets, getAllMonthBudgets, getMonthBudgets } from './budgets';
 import { getMonthFixedExpenses } from './fixedExpenses';
 import { getAllTransactions, getMonthTransactions } from './transactions';
 import { getMonthIncome } from './income';
-import { getActiveSubscriptions } from './subscriptions';
+import { getMonthSubscriptions } from './monthSubscriptions';
 import { getMonthTransfers } from './reserve';
 import { forecastMonth } from '../services/forecast-service';
 import { spendingByCategory } from '../services/statistics-service';
@@ -28,7 +28,7 @@ export interface MonthData {
   budgets: MonthBudget[];
   transactions: Transaction[];
   income: Income[];
-  subscriptions: Subscription[];
+  subscriptions: MonthSubscription[];
   transfers: ReserveTransfer[];
 }
 
@@ -51,7 +51,7 @@ export async function getMonthData(
     getMonthBudgets(monthKey, database),
     getMonthTransactions(monthKey, database),
     getMonthIncome(monthKey, database),
-    getActiveSubscriptions(database),
+    getMonthSubscriptions(monthKey, database),
     getMonthTransfers(monthKey, database),
   ]);
   return { month, fixedExpenses, budgets, transactions, income, subscriptions, transfers };

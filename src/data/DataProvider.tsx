@@ -15,6 +15,7 @@ import type {
   Month,
   MonthFixedExpense,
   MonthKey,
+  MonthSubscription,
   ReserveTransfer,
   Settings,
   Subscription,
@@ -32,13 +33,14 @@ import {
   getAllMonths,
   getMonth,
   materializeMonth,
+  materializeMonthSubscriptions,
   reopenMonth as persistReopenMonth,
   updateMonthAllowance,
   updateMonthStartingReserve,
 } from '../database/months';
 import {
   createFixedExpense,
-  deleteFixedExpense as deleteFixedExpenseRow,
+  deactivateFixedExpense,
   getAllFixedExpenses,
   reorderFixedExpenses,
   setMonthFixedExpenseActual,
@@ -112,7 +114,7 @@ export interface MonthDashboard {
   fixedExpenseStatuses: FixedExpenseWithStatus[];
   transactions: Transaction[];
   income: Income[];
-  subscriptions: Subscription[];
+  subscriptions: MonthSubscription[];
   budgetNames: Map<number, string>;
   budgetColors: Map<number, string | null>;
 }
@@ -278,13 +280,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const loadLocal = useCallback(async () => {
     const db = await getDatabase();
+    const monthKey = currentMonthKey();
     await ensureCurrentMonth(db);
+    // Keeps the current month in step with subscriptions that arrived by sync;
+    // months that are already closed keep their frozen charges.
+    await materializeMonthSubscriptions(monthKey, db);
 
     const nextSettings = await getSettings(db);
     setSettings(nextSettings);
     setSyncState(await getSyncState(db));
 
-    const monthKey = currentMonthKey();
     setCurrentMonth(await getMonth(monthKey, db));
     setCurrentDashboard(await buildDashboard(monthKey));
     setRecentTransactions(await getRecentTransactions(nextSettings.recentTransactionsCount, db));
@@ -415,7 +420,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       },
       removeFixedExpense: async (id) => {
         const db = await getDatabase();
-        await deleteFixedExpenseRow(id, db);
+        await deactivateFixedExpense(id, db);
         await refresh();
       },
       reorderFixedExpenses: async (orderedIds) => {
@@ -520,16 +525,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const db = await getDatabase();
         const sortOrder = allSubscriptions.length;
         await createSubscription({ ...input, sortOrder }, db);
+        await materializeMonth(currentMonthKey(), db);
         await refresh();
       },
       saveSubscription: async (id, input) => {
         const db = await getDatabase();
         await updateSubscriptionRow(id, input, db);
+        await materializeMonth(currentMonthKey(), db);
         await refresh();
       },
       removeSubscription: async (id) => {
         const db = await getDatabase();
         await deleteSubscriptionRow(id, db);
+        await materializeMonth(currentMonthKey(), db);
         await refresh();
       },
       reorderSubscriptions: async (orderedIds) => {

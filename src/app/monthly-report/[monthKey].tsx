@@ -7,7 +7,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useAppData } from '../../data/DataProvider';
 import { getMonthlyReport } from '../../database/monthlyReports';
 import type { MonthlyReport } from '../../services/monthly-report-service';
-import { formatCents } from '../../utils/currency';
+import { formatCents, formatSignedCents } from '../../utils/currency';
 import { monthLabel } from '../../utils/date';
 import { LoadingScreen } from '../../components/loading-screen';
 import { useAppTheme } from '../../theme';
@@ -36,10 +36,6 @@ function ReportRow({
       </Text>
     </View>
   );
-}
-
-function formatSignedCents(cents: number, symbol: string): string {
-  return `${cents >= 0 ? '+' : ''}${formatCents(cents, symbol)}`;
 }
 
 export default function MonthlyReportScreen() {

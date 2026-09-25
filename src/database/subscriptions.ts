@@ -38,14 +38,6 @@ export async function getAllSubscriptions(db?: SQLiteDatabase): Promise<Subscrip
   return rows.map(rowToSubscription);
 }
 
-export async function getActiveSubscriptions(db?: SQLiteDatabase): Promise<Subscription[]> {
-  const database = db ?? (await getDatabase());
-  const rows = await database.getAllAsync<SubscriptionRow>(
-    'SELECT * FROM yearly_subscriptions WHERE active = 1 ORDER BY sort_order ASC, id ASC'
-  );
-  return rows.map(rowToSubscription);
-}
-
 export async function getSubscription(id: number, db?: SQLiteDatabase): Promise<Subscription | null> {
   const database = db ?? (await getDatabase());
   const row = await database.getFirstAsync<SubscriptionRow>(

@@ -18,6 +18,7 @@ export default function NewBudgetScreen() {
     return remainingForBudget({
       allowanceCents: currentMonth.allowanceCents,
       expectedFixedExpensesCents: currentDashboard?.forecast.fixedExpectedTotalCents ?? 0,
+      subscriptionCents: currentDashboard?.forecast.subscriptionTotalCents ?? 0,
       budgets: budgets
         .filter((budget) => budget.active)
         .map((budget) => ({ id: budget.id, amountCents: budget.defaultAmountCents })),

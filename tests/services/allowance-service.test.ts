@@ -2,6 +2,7 @@ import {
   remainingAllowance,
   remainingForBudget,
   reserveAdjustmentCents,
+  reserveDrawBehindPlan,
   spendingDifference,
   unplannedAllowance,
 } from '../../src/services/allowance-service';
@@ -72,6 +73,33 @@ describe('unplannedAllowance', () => {
   });
 });
 
+describe('reserveDrawBehindPlan', () => {
+  it('is on track when the draw is smaller than planned', () => {
+    expect(reserveDrawBehindPlan(15000, 2000)).toBe(false);
+  });
+
+  it('is on track when the month adds to the reserve', () => {
+    expect(reserveDrawBehindPlan(-15000, 2000)).toBe(false);
+  });
+
+  it('is behind the plan when the reserve is drawn as much as planned', () => {
+    expect(reserveDrawBehindPlan(-15000, -15000)).toBe(true);
+    expect(reserveDrawBehindPlan(-15000, -20000)).toBe(true);
+  });
+
+  it('is on track when the reserve is drawn less than planned', () => {
+    expect(reserveDrawBehindPlan(-15000, -2000)).toBe(false);
+  });
+
+  it('is behind the plan when the month drains a reserve it meant to grow', () => {
+    expect(reserveDrawBehindPlan(15000, -20000)).toBe(true);
+  });
+
+  it('is on plan when nothing has moved yet', () => {
+    expect(reserveDrawBehindPlan(0, 0)).toBe(false);
+  });
+});
+
 describe('remainingForBudget', () => {
   const budgets = [
     { id: 1, amountCents: 20000 },
@@ -137,6 +165,27 @@ describe('remainingForBudget', () => {
       expectedFixedExpensesCents: 0,
       budgets: [{ id: 9, amountCents: 40000 }],
       excludeBudgetId: 9,
+    });
+    expect(result).toBe(50000);
+  });
+
+  it('deducts the month subscription charges', () => {
+    const result = remainingForBudget({
+      allowanceCents: 100000,
+      expectedFixedExpensesCents: 30000,
+      subscriptionCents: 3500,
+      budgets,
+      excludeBudgetId: 1,
+    });
+    expect(result).toBe(46500);
+  });
+
+  it('treats a missing subscription total as zero', () => {
+    const result = remainingForBudget({
+      allowanceCents: 100000,
+      expectedFixedExpensesCents: 30000,
+      budgets,
+      excludeBudgetId: 1,
     });
     expect(result).toBe(50000);
   });

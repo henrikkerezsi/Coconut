@@ -1,9 +1,10 @@
-import type { Subscription } from '../../src/models';
+import type { MonthSubscription, Subscription } from '../../src/models';
 import {
   monthlyChargeCents,
   monthlyFromTotal,
+  monthSubscriptionTotal,
+  subscriptionChargesForMonth,
   subscriptionMonths,
-  subscriptionTotalCents,
 } from '../../src/services/subscription-service';
 
 function subscription(overrides: Partial<Subscription> = {}): Subscription {
@@ -42,21 +43,46 @@ describe('monthlyChargeCents', () => {
   });
 });
 
-describe('subscriptionTotalCents', () => {
-  it('totals only the subscriptions charging the given month', () => {
-    const result = subscriptionTotalCents(
+describe('subscriptionChargesForMonth', () => {
+  it('freezes the charges of the subscriptions covering the month', () => {
+    const charges = subscriptionChargesForMonth(
       [
-        subscription({ monthlyAmountCents: 1000 }),
-        subscription({ monthlyAmountCents: 2500, active: false }),
-        subscription({ monthlyAmountCents: 3000, startMonth: '2027-01' }),
+        subscription({ id: 1, name: 'Streaming', monthlyAmountCents: 1000 }),
+        subscription({ id: 2, name: 'Gym', monthlyAmountCents: 2500, startMonth: '2025-01' }),
       ],
       '2025-10'
     );
-    expect(result).toBe(1000);
+    expect(charges).toEqual([
+      { subscriptionId: 1, name: 'Streaming', amountCents: 1000 },
+      { subscriptionId: 2, name: 'Gym', amountCents: 2500 },
+    ]);
   });
 
-  it('returns zero for an empty list', () => {
-    expect(subscriptionTotalCents([], '2025-10')).toBe(0);
+  it('freezes nothing for subscriptions that do not charge the month', () => {
+    const charges = subscriptionChargesForMonth(
+      [
+        subscription({ active: false }),
+        subscription({ deductMonthly: false }),
+        subscription({ startMonth: '2025-11' }),
+        subscription({ endMonth: '2025-09' }),
+      ],
+      '2025-10'
+    );
+    expect(charges).toEqual([]);
+  });
+});
+
+describe('monthSubscriptionTotal', () => {
+  function charge(amountCents: number): MonthSubscription {
+    return { id: 1, monthKey: '2025-10', subscriptionId: 1, name: 'Streaming', amountCents };
+  }
+
+  it('totals the frozen charges', () => {
+    expect(monthSubscriptionTotal([charge(1000), charge(2500)])).toBe(3500);
+  });
+
+  it('returns zero for a month without charges', () => {
+    expect(monthSubscriptionTotal([])).toBe(0);
   });
 });
 

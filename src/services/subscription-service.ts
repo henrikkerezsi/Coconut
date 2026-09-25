@@ -1,4 +1,4 @@
-import type { MonthKey, Subscription } from '../models';
+import type { MonthKey, MonthSubscription, Subscription } from '../models';
 
 interface MonthParts {
   year: number;
@@ -32,15 +32,27 @@ export function monthlyChargeCents(subscription: Subscription, monthKey: MonthKe
   return subscription.monthlyAmountCents;
 }
 
-/** Total monthly deduction across a set of subscriptions for a given month. */
-export function subscriptionTotalCents(
+/**
+ * The subscription charges to freeze into a month. Materialized once per month
+ * so later edits, deactivations or deletions cannot change that month's
+ * spending.
+ */
+export function subscriptionChargesForMonth(
   subscriptions: Subscription[],
   monthKey: MonthKey
-): number {
-  return subscriptions.reduce(
-    (total, subscription) => total + monthlyChargeCents(subscription, monthKey),
-    0
-  );
+): { subscriptionId: number | null; name: string; amountCents: number }[] {
+  return subscriptions
+    .filter((subscription) => monthlyChargeCents(subscription, monthKey) > 0)
+    .map((subscription) => ({
+      subscriptionId: subscription.id,
+      name: subscription.name,
+      amountCents: subscription.monthlyAmountCents,
+    }));
+}
+
+/** Total of the subscription charges already frozen into a month. */
+export function monthSubscriptionTotal(charges: MonthSubscription[]): number {
+  return charges.reduce((total, charge) => total + charge.amountCents, 0);
 }
 
 /** Whole months the subscription covers, including both its start and end month. */

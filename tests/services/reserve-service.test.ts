@@ -65,6 +65,28 @@ describe('projectReserve', () => {
     expect(result.endingReserveCents).toBe(80000);
   });
 
+  it('projects the reserve without transfers for the overview card', () => {
+    const result = projectReserve({
+      startingReserveCents: 100000,
+      actualSpendingCents: 60000,
+      allowanceCents: 50000,
+      incomeCents: 5000,
+      transfers: [transfer('to-month', 20000), transfer('to-reserve', 10000)],
+    });
+    expect(result.endingReserveBeforeTransfersCents).toBe(100000 + (55000 - 60000));
+    expect(result.endingReserveBeforeTransfersCents).not.toBe(result.endingReserveCents);
+  });
+
+  it('projects the same figure with and without transfers when none exist', () => {
+    const result = projectReserve({
+      startingReserveCents: 100000,
+      actualSpendingCents: 40000,
+      allowanceCents: 50000,
+      transfers: [],
+    });
+    expect(result.endingReserveBeforeTransfersCents).toBe(result.endingReserveCents);
+  });
+
   it('keeps the reserve unchanged when spending equals the allowance', () => {
     const result = projectReserve({
       startingReserveCents: 100000,

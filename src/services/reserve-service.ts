@@ -35,6 +35,8 @@ export interface ReserveProjectionInput {
 export interface ReserveProjection {
   startingReserveCents: number;
   endingReserveCents: number;
+  /** The projected reserve from this month's own money, without manual transfers. */
+  endingReserveBeforeTransfersCents: number;
   adjustmentCents: number;
   overspent: boolean;
   transferNetCents: number;
@@ -61,6 +63,7 @@ export function projectReserve(input: ReserveProjectionInput): ReserveProjection
   return {
     startingReserveCents,
     endingReserveCents,
+    endingReserveBeforeTransfersCents: startingReserveCents + adjustmentCents,
     adjustmentCents,
     overspent,
     transferNetCents: netCents,

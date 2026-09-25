@@ -6,9 +6,9 @@ import type {
   MonthBudget,
   MonthFixedExpense,
   MonthKey,
+  MonthSubscription,
   ReserveTransfer,
   Transaction,
-  Subscription,
 } from '../models';
 import { budgetStatus, fixedExpenseAmount, incomeTotal, transactionTotal } from './forecast-service';
 import { reserveAdjustmentCents } from './allowance-service';
@@ -40,7 +40,7 @@ export interface MonthlyReportInput {
   budgets: MonthBudget[];
   transactions: Transaction[];
   income: Income[];
-  subscriptions: Subscription[];
+  subscriptions: MonthSubscription[];
   transfers: ReserveTransfer[];
   fixedExpenseDefinitions: Record<number, FixedExpense>;
   budgetDefinitions: Record<number, Budget>;
@@ -79,26 +79,14 @@ export function reportFixedExpenses(
   });
 }
 
-/**
- * Subscriptions that charged money during the month: every active subscription
- * with a monthly deduction whose start/end period covers the month.
- */
-export function subscriptionsChargedInMonth(
-  subscriptions: Subscription[],
-  monthKey: MonthKey
+/** The subscription charges frozen into the month, with their charged amount. */
+export function reportSubscriptions(
+  charges: MonthSubscription[]
 ): MonthlyReportSubscription[] {
-  return subscriptions
-    .filter(
-      (subscription) =>
-        subscription.active &&
-        subscription.deductMonthly &&
-        monthKey >= subscription.startMonth &&
-        monthKey <= subscription.endMonth
-    )
-    .map((subscription) => ({
-      name: subscription.name,
-      monthlyCents: subscription.monthlyAmountCents,
-    }));
+  return charges.map((charge) => ({
+    name: charge.name,
+    monthlyCents: charge.amountCents,
+  }));
 }
 
 /** Planned vs. spent per flexible budget, sorted by amount spent descending. */
@@ -144,7 +132,7 @@ export function reportBudgets(
  */
 export function buildMonthlyReport(input: MonthlyReportInput): MonthlyReport {
   const fixedExpenses = reportFixedExpenses(input.fixedExpenses, input.fixedExpenseDefinitions);
-  const subscriptions = subscriptionsChargedInMonth(input.subscriptions, input.month.monthKey);
+  const subscriptions = reportSubscriptions(input.subscriptions);
   const budgets = reportBudgets(input.budgets, input.budgetDefinitions, input.transactions);
   const fixedTotalCents = fixedExpenses.reduce((sum, expense) => sum + expense.chargedCents, 0);
   const subscriptionTotalCents = subscriptions.reduce(

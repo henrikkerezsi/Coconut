@@ -9,6 +9,10 @@ export function formatCents(cents: number, symbol = ''): string {
   return negative ? `-${formatted}` : formatted;
 }
 
+export function formatSignedCents(cents: number, symbol = ''): string {
+  return `${cents >= 0 ? '+' : ''}${formatCents(cents, symbol)}`;
+}
+
 export function centsFromString(value: string): number | null {
   const normalized = value.trim().replace(/\s/g, '');
   if (normalized.length === 0) {

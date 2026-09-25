@@ -172,7 +172,8 @@ export default function FixedExpensesScreen() {
             <AppDialog.Title>Delete fixed expense?</AppDialog.Title>
             <AppDialog.Content>
               <PaperText variant="bodyMedium">
-                This removes the definition and its current-month instance. Past months keep their records.
+                This stops the expense from being added to future months. This month and past months keep
+                their recorded amounts.
               </PaperText>
             </AppDialog.Content>
             <AppDialog.Actions>

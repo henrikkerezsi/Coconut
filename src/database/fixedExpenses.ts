@@ -5,7 +5,6 @@ import type {
   MonthKey,
 } from '../models';
 import { getDatabase } from './database';
-import { currentMonthKey } from '../utils/date';
 
 interface FixedExpenseRow {
   id: number;
@@ -128,17 +127,11 @@ export async function reorderFixedExpenses(
   });
 }
 
-export async function deleteFixedExpense(id: number, db?: SQLiteDatabase): Promise<void> {
+export async function deactivateFixedExpense(id: number, db?: SQLiteDatabase): Promise<void> {
   const database = db ?? (await getDatabase());
-  await database.withTransactionAsync(async () => {
-    // Remove only the current month's instance together with the definition.
-    // Past months keep their recorded instances.
-    await database.runAsync(
-      'DELETE FROM month_fixed_expenses WHERE fixed_expense_id = ? AND month_key = ?',
-      [id, currentMonthKey()]
-    );
-    await database.runAsync('DELETE FROM fixed_expenses WHERE id = ?', [id]);
-  });
+  // Only stops the expense from being materialized into future months: existing
+  // month instances, and with them closed-month spending, stay untouched.
+  await database.runAsync('UPDATE fixed_expenses SET active = 0 WHERE id = ?', [id]);
 }
 
 interface MonthFixedExpenseRow {

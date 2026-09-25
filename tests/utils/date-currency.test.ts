@@ -2,7 +2,7 @@ import {
   centsFromString,
   formatCents,
 } from '../../src/utils/currency';
-import { monthKeyOf, previousMonthKey, nextMonthKey } from '../../src/utils/date';
+import { monthKeyOf, monthProgress, previousMonthKey, nextMonthKey } from '../../src/utils/date';
 
 describe('formatCents', () => {
   it('formats cents with European digit grouping', () => {
@@ -56,5 +56,24 @@ describe('month helpers', () => {
     expect(previousMonthKey('2026-09')).toBe('2026-08');
     expect(nextMonthKey('2026-09')).toBe('2026-10');
     expect(previousMonthKey('2026-01')).toBe('2025-12');
+  });
+});
+
+describe('monthProgress', () => {
+  it('counts the current day as elapsed', () => {
+    expect(monthProgress('2026-09-01')).toBeCloseTo(1 / 30);
+    expect(monthProgress('2026-09-15')).toBeCloseTo(0.5);
+    expect(monthProgress('2026-09-30')).toBeCloseTo(1);
+  });
+
+  it('uses the real month length', () => {
+    expect(monthProgress('2026-02-14')).toBeCloseTo(0.5);
+    expect(monthProgress('2024-02-15')).toBeCloseTo(15 / 29);
+    expect(monthProgress('2026-04-30')).toBe(1);
+  });
+
+  it('never exceeds 1 on the last day of a month', () => {
+    expect(monthProgress('2026-01-31')).toBe(1);
+    expect(monthProgress('2024-02-29')).toBe(1);
   });
 });

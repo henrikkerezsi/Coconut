@@ -15,7 +15,10 @@ import {
   insertMonthBudget,
 } from './budgets';
 import { getSettings } from './settings';
+import { getAllSubscriptions } from './subscriptions';
+import { replaceMonthSubscriptions } from './monthSubscriptions';
 import { estimateAmount } from '../services/estimation-service';
+import { subscriptionChargesForMonth } from '../services/subscription-service';
 
 interface MonthRow {
   month_key: MonthKey;
@@ -205,6 +208,23 @@ export async function materializeMonth(
       );
     }
   }
+
+  // Subscription charges are frozen per month, so later edits, deactivations or
+  // deletions never rewrite what a month already charged.
+  await materializeMonthSubscriptions(monthKey, database);
+}
+
+export async function materializeMonthSubscriptions(
+  monthKey: MonthKey,
+  db?: SQLiteDatabase
+): Promise<void> {
+  const database = db ?? (await getDatabase());
+  const subscriptions = await getAllSubscriptions(database);
+  await replaceMonthSubscriptions(
+    monthKey,
+    subscriptionChargesForMonth(subscriptions, monthKey),
+    database
+  );
 }
 
 export async function updateMonthAllowance(

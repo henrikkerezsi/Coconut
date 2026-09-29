@@ -1,43 +1,31 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { FAB, IconButton, List, Portal, Text as PaperText } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useAppData } from '../../data/DataProvider';
 import { formatCents } from '../../utils/currency';
-import { remainingForBudget } from '../../services/allowance-service';
 import { LoadingScreen } from '../../components/loading-screen';
-import { AmountInput } from '../../components/amount-input';
 import { AppDialog } from '../../components/app-dialog';
 import { DragHandle, ReorderableList } from '../../components/reorderable-list';
-import type { BudgetWithStatus } from '../../data/DataProvider';
 import { useAppTheme } from '../../theme';
-import { FadeIn } from '../../components/fade-in';
 
+/**
+ * The budgets themselves: what a category is for and what it is planned to cost
+ * by default. The amount the month at hand stands at is not a definition, so it
+ * is not edited here: the month's plan is changed in one explicit action in
+ * planning, which records what changed.
+ */
 export default function BudgetsScreen() {
   const router = useRouter();
   const theme = useAppTheme();
-  const {
-    ready,
-    settings,
-    budgets,
-    currentMonth,
-    currentDashboard,
-    removeBudget,
-    setBudgetPlanned,
-    reorderBudgets,
-  } = useAppData();
+  const { ready, settings, budgets, removeBudget, reorderBudgets } = useAppData();
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [planned, setPlanned] = useState<BudgetWithStatus | null>(null);
-  const [plannedDraft, setPlannedDraft] = useState<number | null>(null);
-  const [plannedError, setPlannedError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
 
   if (!ready) {
     return <LoadingScreen />;
   }
 
   const symbol = settings.currencySymbol;
-  const statuses = currentDashboard?.budgetStatuses ?? [];
 
   return (
     <>
@@ -48,30 +36,13 @@ export default function BudgetsScreen() {
         onReorder={(next) => void reorderBudgets(next.map((budget) => budget.id))}
         ListHeaderComponent={
           <>
-            <List.Subheader>Planned this month</List.Subheader>
-            {statuses.map((status) => (
-              <FadeIn key={status.monthBudgetId}>
-                <List.Item
-                  title={status.budget.name}
-                  description={`${formatCents(status.status.spentCents, symbol)} spent`}
-                  right={(props) => (
-                    <PaperText {...props} style={styles.rowRight}>
-                      {formatCents(status.plannedCents, symbol)}
-                    </PaperText>
-                  )}
-                  onPress={() => {
-                    setPlannedDraft(status.plannedCents);
-                    setPlannedError(null);
-                    setPlanned(status);
-                  }}
-                />
-              </FadeIn>
-            ))}
-            {statuses.length === 0 && (
-              <PaperText variant="bodyMedium" style={styles.empty}>
-                No budgets in the current month yet.
-              </PaperText>
-            )}
+            <List.Item
+              title="Plan this month"
+              description="Set what you expect to spend in each budget this month"
+              left={(props) => <List.Icon {...props} icon="calendar-edit-outline" />}
+              right={(props) => <List.Icon {...props} icon="chevron-right" />}
+              onPress={() => router.push('/planning/month')}
+            />
             <List.Subheader>Definitions</List.Subheader>
           </>
         }
@@ -113,67 +84,6 @@ export default function BudgetsScreen() {
         )}
         contentContainerStyle={styles.content}
       />
-      {planned !== null && (
-        <Portal>
-          <AppDialog visible onDismiss={() => setPlanned(null)}>
-            <AppDialog.Title>Planned this month</AppDialog.Title>
-            <AppDialog.Content>
-              <AmountInput
-                label={planned.budget.name}
-                value={plannedDraft}
-                onChange={setPlannedDraft}
-                prefix={symbol}
-                error={plannedError}
-              />
-              <PaperText variant="bodySmall" style={styles.dialogHint}>
-                <Text style={styles.remainingAmount}>
-                  {formatCents(
-                    remainingForBudget({
-                      allowanceCents: currentMonth?.allowanceCents ?? 0,
-                      expectedFixedExpensesCents:
-                        currentDashboard?.forecast.fixedExpectedTotalCents ?? 0,
-                      subscriptionCents:
-                        currentDashboard?.forecast.subscriptionTotalCents ?? 0,
-                      budgets: statuses.map((entry) => ({
-                        id: entry.budget.id,
-                        amountCents: entry.plannedCents,
-                      })),
-                      excludeBudgetId: planned.budget.id,
-                    }),
-                    symbol
-                  )}
-                </Text>{' '}
-                remaining from allowance (including expected fixed expenses, subscriptions and other budgets, excluding this budget).
-              </PaperText>
-              <PaperText variant="bodySmall" style={styles.dialogHint}>
-                Only affects the current month.
-              </PaperText>
-            </AppDialog.Content>
-            <AppDialog.Actions>
-              <List.Item title="Cancel" onPress={() => setPlanned(null)} />
-              <List.Item
-                title="Save"
-                onPress={async () => {
-                  if (plannedDraft === null) {
-                    setPlannedError('Enter a valid amount.');
-                    return;
-                  }
-                  setSaving(true);
-                  try {
-                    if (planned.monthBudgetId !== null) {
-                      await setBudgetPlanned(planned.monthBudgetId, plannedDraft);
-                    }
-                  } finally {
-                    setSaving(false);
-                    setPlanned(null);
-                  }
-                }}
-                disabled={saving}
-              />
-            </AppDialog.Actions>
-          </AppDialog>
-        </Portal>
-      )}
       {deleteId !== null && (
         <Portal>
           <AppDialog visible onDismiss={() => setDeleteId(null)}>
@@ -220,9 +130,6 @@ const styles = StyleSheet.create({
     marginTop: 32,
     paddingHorizontal: 32,
   },
-  rowRight: {
-    alignSelf: 'center',
-  },
   rowActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -231,13 +138,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 16,
     bottom: 16,
-  },
-  dialogHint: {
-    marginTop: 8,
-    opacity: 0.6,
-  },
-  remainingAmount: {
-    fontWeight: '700',
   },
   definitionRow: {
     flexDirection: 'row',

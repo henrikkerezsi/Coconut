@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { KeyboardAwareScrollView } from '../../components/keyboard-aware-scroll-view';
 import { Button, Card, List, Portal, Text } from 'react-native-paper';
 import { useAppData } from '../../data/DataProvider';
@@ -13,11 +14,11 @@ import { LoadingScreen } from '../../components/loading-screen';
 import { ScreenToast } from '../../components/screen-toast';
 
 export default function ReserveScreen() {
+  const router = useRouter();
   const theme = useAppTheme();
   const {
     ready,
     settings,
-    currentMonth,
     currentDashboard,
     reserveHistory,
     setInitialReserve,
@@ -28,37 +29,54 @@ export default function ReserveScreen() {
   const [initialError, setInitialError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  if (!ready || !currentMonth || !currentDashboard) {
+  if (!ready) {
     return <LoadingScreen />;
   }
 
-  const { reserveProjection: projection } = currentDashboard;
   const symbol = settings.currencySymbol;
-  const adjustment = projection.adjustmentCents;
+  // Before a month is started there is nothing to project, but the history and
+  // the setting behind it are still real and still worth reaching.
+  const projection = currentDashboard?.reserveProjection ?? null;
 
   return (
     <KeyboardAwareScrollView contentContainerStyle={styles.container}>
-      <View style={styles.statRow}>
-        <StatCard
-          label="Starting reserve"
-          value={projection.startingReserveCents}
-          format={(v) => formatCents(v, symbol)}
-        />
-        <StatCard
-          label="Ending reserve"
-          value={projection.endingReserveCents}
-          format={(v) => formatCents(v, symbol)}
-        />
-      </View>
-      <View style={styles.statRow}>
-        <StatCard
-          label="Month surplus"
-          value={adjustment}
-          format={(v) => (v >= 0 ? '+' : '') + formatCents(v, symbol)}
-          sub={projection.overspent ? 'Spending above allowance draws the reserve' : 'Unused allowance stays in the reserve'}
-          tone={projection.overspent ? 'bad' : 'good'}
-        />
-      </View>
+      {projection ? (
+        <>
+          <View style={styles.statRow}>
+            <StatCard
+              label="Starting reserve"
+              value={projection.startingReserveCents}
+              format={(v) => formatCents(v, symbol)}
+            />
+            <StatCard
+              label="Ending reserve"
+              value={projection.endingReserveCents}
+              format={(v) => formatCents(v, symbol)}
+            />
+          </View>
+          <View style={styles.statRow}>
+            <StatCard
+              label="Month surplus"
+              value={projection.adjustmentCents}
+              format={(v) => (v >= 0 ? '+' : '') + formatCents(v, symbol)}
+              sub={projection.overspent ? 'Spending above allowance draws the reserve' : 'Unused allowance stays in the reserve'}
+              tone={projection.overspent ? 'bad' : 'good'}
+            />
+          </View>
+        </>
+      ) : (
+        <Card mode="elevated" style={styles.card}>
+          <Card.Content>
+            <Text variant="bodyMedium">
+              No month is open yet, so there is nothing to project. Start a month to see
+              where your reserve stands and what it is expected to do this month.
+            </Text>
+            <Button mode="contained" style={styles.button} onPress={() => router.replace('/')}>
+              Start a month
+            </Button>
+          </Card.Content>
+        </Card>
+      )}
         <Card mode="elevated" style={styles.card}>
           <Card.Title
             title="Reserve history"

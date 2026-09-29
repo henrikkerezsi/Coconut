@@ -139,6 +139,88 @@ The final action is closing the month, which first asks for confirmation and sta
 it is final and cannot be undone. Confirming closes the month, records the reserve
 movement, and presents the closing report of that month.
 
+### 3.3 Starting a month
+
+A month only ever comes into existence because the user started it. The application never
+creates a period on its own, so both a new user and a user who has just closed a month
+are asked the same question: what does the coming month look like?
+
+Starting a month is presented on one screen, and it is what the main interface waits for.
+The overview and the other month-based screens are behind it until the month exists,
+because they are built around a month. Settings and the planning screens stay reachable
+throughout, so the user can go and set up what the screen is missing.
+
+The screen shows, before anything is written:
+
+- The savings reserve the month starts on, carried forward from the month before it.
+- The monthly allowance.
+- The average monthly spending so far, or that there is no history yet.
+- What the month has to spend, being the allowance plus any planned draw.
+- The fixed expenses of the month at their expected amounts, and its subscription
+  charges. These are deducted before anything is planned, because they are not the user's
+  choice.
+- What is therefore left to spread across the budgets.
+
+The user may state how much they intend to draw from the reserve for that month. This is a
+planning figure only. It moves no money, is not part of the month's accounting, and leaves
+the reserve balance and its history untouched; the real movement is decided at the end of
+the month by the closing rule, which may well be no movement at all. A draw can never be
+more than the reserve holds. It is offered because it is what makes the plan below it
+meaningful: it raises what the month has to spend for planning purposes only. The figure
+becomes the draw the month starts planning with, and is recorded as such (§3.4).
+
+The figure is signed, because the two intentions are opposites. A positive amount is money
+the user intends to take out of the reserve and spend, which raises what the month has to
+plan. A negative amount is money the user intends to set aside on top of what the month
+already leaves over, and the plan is then sized around what is left, so that the saving is
+not quietly spent. A negative amount is not limited by the reserve: setting money aside
+only ever adds to it. The user may also have no intention either way, which is a draw of
+zero.
+
+The remaining amount is then planned across the budgets, each of which starts from its
+default amount. A budget cannot be planned above what the month actually has available
+once the fixed expenses, the subscriptions and the other budgets are paid for, and the
+month cannot be started while the plan as a whole exceeds what it has. Nothing is required:
+a user with no allowance, no fixed expenses, no subscriptions or no budgets can still start
+the month, and the screen links to the setting, the fixed expenses, the subscriptions and
+the budgets so nothing is a dead end.
+
+Starting the month writes it, its expected fixed expenses, its subscription charges and
+the plan in a single step, so a month never exists half-planned. From then on the main
+interface is reachable again.
+
+### 3.4 Re-planning a month
+
+A month is planned once and then re-planned as often as the user needs, in one place and
+as one explicit action. The plan of a running month is the month's own, not a draft, so
+leaving the screen without saving changes nothing.
+
+Re-planning is reached from Settings, under Planning, as "This month's plan", and from
+Flexible Budgets. It shows the same figures as starting a month does, but read from the
+month itself rather than from the current settings: the month's own allowance, the fixed
+expenses and subscription charges it was materialized with, the amounts its budgets
+already stand at, and the draw it already plans with. A month is never quietly
+re-estimated by being re-planned.
+
+Saving records what changed, which is the reason it is one action rather than several
+edits. For every budget whose amount moved, the amount it was at and the amount it is
+now are recorded. A change to the draw is recorded with the amount it was at and the
+amount it is now, together with the budget the extra was handed to where one budget
+absorbed exactly the difference. The amounts a month is currently planned at are
+recalculated from these changes, so the month always stands at the plan the user last
+committed to.
+
+The record of a month that was planned before it existed opens with the first re-plan,
+at the amounts the month stood at that moment, and makes no claim about how it came to
+be there. A month is never re-planned into a plan that exceeds what it has available,
+and the draw is still bounded by the reserve it starts on.
+
+The planned draw exists to size the plan. It is not part of the month's accounting, so
+the overview, the forecast and the closing rule are unchanged by it: they work from the
+month's bare allowance. A re-plan that raises the draw and allocates the extra therefore
+shows on the overview as spending that the month has not accounted for, which is true
+and is left visible rather than reconciled away.
+
 ---
 
 ## 4. Fixed Expenses
@@ -176,6 +258,12 @@ historical statistics and future estimates use actual spending.
 Users define discretionary spending categories with monthly budget amounts.
 
 Budgets represent intended spending allocations, not hard restrictions.
+
+A budget is a definition: what the category is for, and what it is planned to cost by
+default. The amount a particular month stands at is not part of the definition and is
+not changed from here. Setting the month's amounts is one explicit action in planning
+(§3.4), which also records what changed; the screen therefore offers "Plan this month"
+rather than a list of the current month's amounts to edit one at a time.
 
 The sum of flexible budgets and fixed expenses may exceed the monthly allowance. This is
 intentional and supported naturally.
@@ -302,10 +390,15 @@ Bottom-bar tab for Shared Spaces:
   immutable, report stored; cancelled: period stays open.
 - Read-only access to all past closing reports.
 
+### This month's plan
+Re-planning the running month: its budgets, its draw from the reserve, and the record of
+what each change was. Reached from Settings and from Flexible Budgets. See §3.4.
+
 ### Settings / Planning
 Configuration for:
 - Monthly allowance.
 - Savings reserve.
+- This month's plan (re-planning, §3.4).
 - Fixed expenses.
 - Variable fixed-expense estimation methods.
 - Flexible budgets.

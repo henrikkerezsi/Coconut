@@ -32,13 +32,15 @@ import { getSyncState, updateSyncState } from '../database/syncState';
 import { isValidApiKey, normalizeSupabaseUrl } from '../services/sync-service';
 import {
   closeMonth as persistCloseMonth,
-  ensureActiveMonth,
+  createPlannedMonth,
   getAllMonths,
   getMonth,
   materializeMonth,
   updateMonthAllowance,
   updateMonthStartingReserve,
+  type PlannedMonthInput,
 } from '../database/months';
+import { recordMonthPlan, type MonthPlanUpdate } from '../database/monthPlan';
 import {
   createFixedExpense,
   deactivateFixedExpense,
@@ -52,7 +54,6 @@ import {
   deleteBudget as deleteBudgetRow,
   getAllBudgets,
   reorderBudgets,
-  setMonthBudgetPlanned,
   updateBudget as updateBudgetRow,
 } from '../database/budgets';
 import {
@@ -135,6 +136,12 @@ interface AppData {
   currentMonth: Month | null;
   currentDashboard: MonthDashboard | null;
   /**
+   * The month that is waiting to be started, or null while one is open. A month
+   * only ever comes into existence through `startMonth`, so this is what the
+   * planning screen offers and what keeps the main interface out of reach.
+   */
+  pendingMonthKey: MonthKey | null;
+  /**
    * The period the app is working on. It advances when a month is closed rather
    * than with the calendar, so it can be ahead of or behind the calendar month.
    */
@@ -163,7 +170,6 @@ interface AppData {
   saveBudget: (id: number, input: Omit<Budget, 'id'>) => Promise<void>;
   removeBudget: (id: number) => Promise<void>;
   reorderBudgets: (orderedIds: number[]) => Promise<void>;
-  setBudgetPlanned: (monthBudgetId: number, plannedCents: number) => Promise<void>;
   addTransaction: (input: TransactionInput) => Promise<void>;
   saveTransaction: (id: number, input: TransactionInput) => Promise<void>;
   saveTransactionAttachment: (id: number, attachment: Attachment | null) => Promise<void>;
@@ -179,6 +185,14 @@ interface AppData {
   removeSubscription: (id: number) => Promise<void>;
   reorderSubscriptions: (orderedIds: number[]) => Promise<void>;
   closeCurrentMonth: (monthKey: MonthKey) => Promise<boolean>;
+  /** Creates the pending month with the plan the user laid out for it. */
+  startMonth: (input: PlannedMonthInput) => Promise<void>;
+  /**
+   * Applies an explicit re-plan of the month that is running, and records what it
+   * changed. A month planned before the record existed is opened at the amounts
+   * it stood at when the user first re-planned it.
+   */
+  replanMonth: (input: MonthPlanUpdate) => Promise<void>;
   refresh: () => Promise<void>;
   syncSharedAndRefresh: () => Promise<void>;
 }
@@ -210,31 +224,19 @@ async function settleMonth(monthKey: MonthKey, db: SQLiteDatabase): Promise<bool
 
 /**
  * Brings the dataset in line with the closing rules before the app reads it:
+ * every open month whose closing window has passed is settled, so a month the
+ * user never got to close is finished rather than left open. Its reserve
+ * adjustment is applied and recorded at that point.
  *
- * 1. Every open month whose closing window has passed is settled, so a month the
- *    user never got to close is finished rather than left open. Its reserve
- *    adjustment is applied and recorded at that point.
- * 2. The period the app is working on is then resolved and, when closing moved
- *    the app on to a period that does not exist yet, created.
- *
- * Creating a period can expose another stale one behind it, so this repeats
- * until the dataset is settled, bounded by the two years a long absence spans.
+ * It deliberately stops there. When nothing is left open, the month the app
+ * would move on to is only resolved, never created: the user starts it through
+ * the planning screen, which is what makes a month exist at all.
  */
-const MAX_CATCH_UP_PERIODS = 24;
-
 async function catchUpOnClosings(db: SQLiteDatabase, now: Dayjs): Promise<MonthKey> {
-  const calendarKey = currentMonthKey();
-  for (let pass = 0; pass < MAX_CATCH_UP_PERIODS; pass += 1) {
-    for (const stale of monthsRequiringAutoClose(await getAllMonths(db), now)) {
-      await settleMonth(stale, db);
-    }
-    const active = resolveActiveMonth(await getAllMonths(db), calendarKey);
-    if (!active.needsMaterializing) {
-      return active.monthKey;
-    }
-    await ensureActiveMonth(active.monthKey, db);
+  for (const stale of monthsRequiringAutoClose(await getAllMonths(db), now)) {
+    await settleMonth(stale, db);
   }
-  return calendarKey;
+  return resolveActiveMonth(await getAllMonths(db), currentMonthKey()).monthKey;
 }
 
 /**
@@ -343,6 +345,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     lastSyncError: null,
   });
   const [currentMonth, setCurrentMonth] = useState<Month | null>(null);
+  const [pendingMonthKey, setPendingMonthKey] = useState<MonthKey | null>(null);
   const [currentDashboard, setCurrentDashboard] = useState<MonthDashboard | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
   const [allFixedExpenses, setAllFixedExpenses] = useState<FixedExpense[]>([]);
@@ -363,8 +366,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setSettings(nextSettings);
     setSyncState(await getSyncState(db));
 
-    setCurrentMonth(await getMonth(monthKey, db));
-    setCurrentDashboard(await buildDashboard(monthKey));
+    const month = await getMonth(monthKey, db);
+    setCurrentMonth(month);
+    // A resolved month with no row is the one waiting to be started.
+    setPendingMonthKey(month ? null : monthKey);
+    setCurrentDashboard(month ? await buildDashboard(monthKey) : null);
     setRecentTransactions(await getRecentTransactions(nextSettings.recentTransactionsCount, db));
     setAllFixedExpenses(await getAllFixedExpenses(db));
     setBudgets(await getAllBudgets(db));
@@ -425,6 +431,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       recentTransactions,
       currentMonth,
       currentDashboard,
+      pendingMonthKey,
       activeMonthKey,
       allFixedExpenses,
       budgets,
@@ -531,11 +538,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         await reorderBudgets(orderedIds, db);
         await refresh();
       },
-      setBudgetPlanned: async (monthBudgetId, plannedCents) => {
-        const db = await getDatabase();
-        await setMonthBudgetPlanned(monthBudgetId, plannedCents, db);
-        await refresh();
-      },
       addTransaction: async (input) => {
         const db = await getDatabase();
         assertActiveMonthDate(input.date, activeMonthKey, 'A transaction');
@@ -626,10 +628,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         await refresh();
         return closed;
       },
+      startMonth: async (input) => {
+        const db = await getDatabase();
+        await createPlannedMonth(input, db);
+        await refresh();
+      },
+      replanMonth: async (input) => {
+        const db = await getDatabase();
+        await recordMonthPlan(input, db);
+        await refresh();
+      },
       refresh,
       syncSharedAndRefresh,
     };
-  }, [ready, settings, syncState, recentTransactions, currentMonth, currentDashboard, allFixedExpenses, budgets, allSubscriptions, allMonths, reserveHistory, activeMonthKey, refresh, syncSharedAndRefresh]);
+  }, [ready, settings, syncState, recentTransactions, currentMonth, currentDashboard, pendingMonthKey, allFixedExpenses, budgets, allSubscriptions, allMonths, reserveHistory, activeMonthKey, refresh, syncSharedAndRefresh]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

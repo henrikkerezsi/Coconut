@@ -60,23 +60,74 @@ ${syncTriggersSql()}
 `;
 }
 
-const SYNC_TABLE_SPECS: Record<string, { pk: string; identity: string }> = {
-  months: { pk: 'month_key', identity: 'month_key' },
-  fixed_expenses: { pk: 'id', identity: 'uuid' },
-  month_fixed_expenses: { pk: 'id', identity: 'uuid' },
-  budgets: { pk: 'id', identity: 'uuid' },
-  month_budgets: { pk: 'id', identity: 'uuid' },
-  transactions: { pk: 'id', identity: 'uuid' },
-  income: { pk: 'id', identity: 'uuid' },
-  reserve_transfers: { pk: 'id', identity: 'uuid' },
-  yearly_subscriptions: { pk: 'id', identity: 'uuid' },
+interface SyncTableSpec {
+  pk: string;
+  identity: string;
+}
+
+/**
+ * The tables whose rows sync, and the migration that brings each one's sync
+ * support into being.
+ *
+ * The migration is what decides when a table is added to the change-capture
+ * triggers, never this list. Earlier migrations already embed the trigger SQL
+ * built from this list at the moment the module loads, so a table added to it
+ * later still has to exist by the time the first of those migrations runs. A
+ * table introduced by a later migration therefore declares its triggers in that
+ * migration instead, and names its own spec here so the same trigger SQL can be
+ * rebuilt for it.
+ */
+const SYNC_TABLE_SPECS: Record<string, { spec: SyncTableSpec; addedIn: number }> = {
+  months: { spec: { pk: 'month_key', identity: 'month_key' }, addedIn: 1 },
+  fixed_expenses: { spec: { pk: 'id', identity: 'uuid' }, addedIn: 1 },
+  month_fixed_expenses: { spec: { pk: 'id', identity: 'uuid' }, addedIn: 1 },
+  budgets: { spec: { pk: 'id', identity: 'uuid' }, addedIn: 1 },
+  month_budgets: { spec: { pk: 'id', identity: 'uuid' }, addedIn: 1 },
+  transactions: { spec: { pk: 'id', identity: 'uuid' }, addedIn: 1 },
+  income: { spec: { pk: 'id', identity: 'uuid' }, addedIn: 1 },
+  reserve_transfers: { spec: { pk: 'id', identity: 'uuid' }, addedIn: 1 },
+  yearly_subscriptions: { spec: { pk: 'id', identity: 'uuid' }, addedIn: 1 },
+  month_budget_plan_events: { spec: { pk: 'id', identity: 'uuid' }, addedIn: 15 },
 };
 
+/**
+ * The sync tables that already exist by the first migration, which is what the
+ * trigger SQL embedded in the earlier migrations was built from. A migration
+ * that introduces its own synced table declares that table's triggers in its own
+ * SQL and never widens this.
+ */
+function baselineSyncTableSpecs(): [string, SyncTableSpec][] {
+  return Object.entries(SYNC_TABLE_SPECS)
+    .filter(([, { addedIn }]) => addedIn <= 1)
+    .map(([table, { spec }]) => [table, spec]);
+}
+
+/**
+ * The change-capture triggers for the given synced tables. A migration that
+ * introduces its own synced table uses this to declare them, so that adding a
+ * table never has to change the trigger SQL an earlier migration already wrote.
+ */
+export function syncTriggersForTablesSql(tables: string[]): string {
+  return buildSyncTriggersSql(
+    tables.map((table) => {
+      const entry = SYNC_TABLE_SPECS[table];
+      if (entry === undefined) {
+        throw new Error(`${table} is not a synced table`);
+      }
+      return [table, entry.spec] as [string, SyncTableSpec];
+    })
+  );
+}
+
 export function syncTriggersSql(): string {
+  return buildSyncTriggersSql(baselineSyncTableSpecs());
+}
+
+function buildSyncTriggersSql(tables: [string, SyncTableSpec][]): string {
   const parts: string[] = [];
   const timestampSql = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
   const pullGuard = `(SELECT COALESCE((SELECT value FROM sync_meta WHERE key = 'pull_in_progress'), '0') = '0')`;
-  for (const [table, { pk, identity }] of Object.entries(SYNC_TABLE_SPECS)) {
+  for (const [table, { pk, identity }] of tables) {
     parts.push(`
 CREATE TRIGGER IF NOT EXISTS trg_${table}_ai AFTER INSERT ON ${table}
 WHEN ${pullGuard}
@@ -115,7 +166,7 @@ END;
 
 function dropSyncTriggersSql(): string {
   const names: string[] = [];
-  for (const table of Object.keys(SYNC_TABLE_SPECS)) {
+  for (const table of baselineSyncTableSpecs().map(([table]) => table)) {
     names.push(`trg_${table}_ai`, `trg_${table}_au`, `trg_${table}_ad`);
   }
   return names.map((name) => `DROP TRIGGER IF EXISTS ${name};`).join('\n');
@@ -389,9 +440,9 @@ CREATE TABLE IF NOT EXISTS sync_state (
     description: 'Supabase row synchronization support',
     sql: `
 ALTER TABLE settings ADD COLUMN updated_at TEXT;
-${Object.keys(SYNC_TABLE_SPECS)
+${baselineSyncTableSpecs()
   .map(
-    (table) => `
+    ([table]) => `
 ALTER TABLE ${table} ADD COLUMN uuid TEXT;
 ALTER TABLE ${table} ADD COLUMN updated_at TEXT;`
   )
@@ -399,17 +450,17 @@ ALTER TABLE ${table} ADD COLUMN updated_at TEXT;`
 ALTER TABLE transactions ADD COLUMN origin_type TEXT;
 ALTER TABLE transactions ADD COLUMN origin_id TEXT;
 
-${Object.keys(SYNC_TABLE_SPECS)
+${baselineSyncTableSpecs()
   .map(
-    (table) => `
+    ([table]) => `
 CREATE UNIQUE INDEX IF NOT EXISTS idx_${table}_uuid ON ${table} (uuid);`
   )
   .join('\n')}
 
 UPDATE settings SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE updated_at IS NULL;
-${Object.keys(SYNC_TABLE_SPECS)
+${baselineSyncTableSpecs()
   .map(
-    (table) => `
+    ([table]) => `
 UPDATE ${table}
    SET uuid = lower(hex(randomblob(16))),
        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
@@ -544,6 +595,45 @@ SELECT m.month_key, s.id, s.name, s.monthly_amount_cents
     sql: `
 ALTER TABLE transactions ADD COLUMN rating TEXT
   CHECK (rating IS NULL OR rating IN ('regret', 'neutral', 'good'));
+`,
+  },
+  {
+    id: 15,
+    description: 'Month plan record',
+    // The record of how a month's plan was arrived at: the amount each budget
+    // started at, every explicit change to it afterwards, and every explicit
+    // change to the planned reserve draw together with the budget the money was
+    // handed to. Written only when the user explicitly re-plans, so it is a
+    // history of decisions and never a second source of truth for the plan: the
+    // plan itself stays in month_budgets.
+    //
+    // Not backfilled. Existing months have no record of what they started at,
+    // and inventing one would be a claim about a past this data does not have.
+    // The record opens with the first explicit re-plan, which records the amount
+    // as it stands at that moment.
+    sql: `
+CREATE TABLE IF NOT EXISTS month_budget_plan_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  month_key TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('initial', 'budget', 'draw')),
+  budget_id INTEGER,
+  previous_amount_cents INTEGER NOT NULL,
+  new_amount_cents INTEGER NOT NULL,
+  funded_budget_id INTEGER,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  uuid TEXT,
+  updated_at TEXT,
+  FOREIGN KEY (month_key) REFERENCES months (month_key) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_month_budget_plan_events_month
+  ON month_budget_plan_events (month_key, id);
+CREATE INDEX IF NOT EXISTS idx_month_budget_plan_events_budget
+  ON month_budget_plan_events (month_key, budget_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_month_budget_plan_events_uuid
+  ON month_budget_plan_events (uuid);
+
+${syncTriggersForTablesSql(['month_budget_plan_events'])}
 `,
   },
 ];

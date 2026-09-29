@@ -2,9 +2,12 @@
 
 import { DatabaseSync } from 'node:sqlite';
 import { MIGRATIONS } from '../../src/database/migrations';
-import { closeMonth } from '../../src/database/months';
+import { closeMonth, createPlannedMonth } from '../../src/database/months';
 import { createReserveTransfer, getReserveTransfers } from '../../src/database/reserve';
-import { getMonth, ensureActiveMonth } from '../../src/database/months';
+import { getMonth } from '../../src/database/months';
+import { getMonthBudgets } from '../../src/database/budgets';
+import { getMonthFixedExpenses } from '../../src/database/fixedExpenses';
+import { updateSettings } from '../../src/database/settings';
 import { buildAutomaticReserveTransfer } from '../../src/services/reserve-service';
 import { TRANSACTION_RATINGS } from '../../src/models';
 
@@ -12,6 +15,7 @@ interface TestDb {
   getFirstAsync<T>(sql: string, params?: unknown[]): Promise<T | null>;
   getAllAsync<T>(sql: string, params?: unknown[]): Promise<T[]>;
   runAsync(sql: string, params?: unknown[]): Promise<unknown>;
+  withTransactionAsync<T>(task: () => Promise<T>): Promise<T>;
 }
 
 type SqlParams = Parameters<ReturnType<DatabaseSync['prepare']>['get']>;
@@ -32,6 +36,17 @@ function makeDbApi(raw: DatabaseSync): TestDb {
         lastInsertRowId: Number(result.lastInsertRowid),
         changes: Number(result.changes),
       });
+    },
+    async withTransactionAsync<T>(task: () => Promise<T>): Promise<T> {
+      raw.exec('BEGIN');
+      try {
+        const result = await task();
+        raw.exec('COMMIT');
+        return result;
+      } catch (error) {
+        raw.exec('ROLLBACK');
+        throw error;
+      }
     },
   };
 }
@@ -174,21 +189,97 @@ describe('closing a month', () => {
     const raw = freshDb();
     seed(raw, 100000);
     await settle(raw, 137500, 37500);
-    const next = await ensureActiveMonth('2026-10', makeDbApi(raw) as never);
+    const next = await createPlannedMonth(
+      { monthKey: '2026-10', budgetPlans: {}, drawCents: 0 },
+      makeDbApi(raw) as never
+    );
     expect(next.monthKey).toBe('2026-10');
     expect(next.startingReserveCents).toBe(137500);
     expect(next.isClosed).toBe(false);
   });
 
-  it('does not change an existing period when asked to ensure it', async () => {
+  it('does not change an existing period when it is planned again', async () => {
     const raw = freshDb();
     seed(raw, 100000);
     raw
       .prepare('UPDATE months SET allowance_cents = 4242 WHERE month_key = ?')
       .run(MONTH_KEY);
-    const month = await ensureActiveMonth(MONTH_KEY, makeDbApi(raw) as never);
+    const month = await createPlannedMonth(
+      { monthKey: MONTH_KEY, budgetPlans: {}, drawCents: 0 },
+      makeDbApi(raw) as never
+    );
     expect(month.allowanceCents).toBe(4242);
     expect(month.startingReserveCents).toBe(100000);
+  });
+
+  it('creates a first month on the initial reserve with the configured allowance', async () => {
+    const raw = freshDb();
+    const db = makeDbApi(raw) as never;
+    await updateSettings({ monthlyAllowanceCents: 175000, initialReserveCents: 25000 }, db);
+    const month = await createPlannedMonth({ monthKey: MONTH_KEY, budgetPlans: {}, drawCents: 0 }, db);
+    expect(month.allowanceCents).toBe(175000);
+    expect(month.startingReserveCents).toBe(25000);
+    expect(month.isClosed).toBe(false);
+  });
+
+  it('writes the plan onto the month budgets and leaves the rest at their default', async () => {
+    const raw = freshDb();
+    const db = makeDbApi(raw) as never;
+    raw
+      .prepare(
+        `INSERT INTO budgets (name, default_amount_cents, active, sort_order)
+         VALUES ('Food', 20000, 1, 0), ('Fun', 10000, 1, 1), ('Later', 5000, 1, 2)`
+      )
+      .run();
+    await createPlannedMonth(
+      { monthKey: MONTH_KEY, budgetPlans: { 1: 45000, 3: 0 }, drawCents: 0 },
+      db
+    );
+    const budgets = await getMonthBudgets(MONTH_KEY, db);
+    expect(budgets.map((entry) => entry.plannedAmountCents).sort((a, b) => a - b)).toEqual([
+      0, 10000, 45000,
+    ]);
+  });
+
+  it('materializes the expected fixed expenses the new month starts with', async () => {
+    const raw = freshDb();
+    const db = makeDbApi(raw) as never;
+    raw
+      .prepare(
+        `INSERT INTO fixed_expenses
+           (name, expected_amount_cents, kind, recurrence, estimation_strategy, active, sort_order)
+         VALUES ('Rent', 120000, 'fixed', 'monthly', 'manual', 1, 0)`
+      )
+      .run();
+    await createPlannedMonth({ monthKey: MONTH_KEY, budgetPlans: {}, drawCents: 0 }, db);
+    const instances = await getMonthFixedExpenses(MONTH_KEY, db);
+    expect(instances).toHaveLength(1);
+    expect(instances[0].expectedAmountCents).toBe(120000);
+    expect(instances[0].actualAmountCents).toBeNull();
+  });
+
+  it('leaves no month behind when the plan cannot be written', async () => {
+    const raw = freshDb();
+    const db = makeDbApi(raw) as never;
+    raw
+      .prepare(
+        `INSERT INTO budgets (name, default_amount_cents, active, sort_order)
+         VALUES ('Food', 20000, 1, 0)`
+      )
+      .run();
+    await expect(
+      createPlannedMonth(
+        {
+          monthKey: MONTH_KEY,
+          drawCents: 0,
+          get budgetPlans(): Record<number, number> {
+            throw new Error('plan rejected');
+          },
+        },
+        db
+      )
+    ).rejects.toThrow('plan rejected');
+    expect(await getMonth(MONTH_KEY, db)).toBeNull();
   });
 
   it('accepts only the allowed ratings on transactions', () => {

@@ -171,9 +171,23 @@ export const COMPLETE_ADAPTERS: SyncTableAdapter[] = [
     ],
   }),
   makeAdapter({
+    localTable: 'month_budget_plan_events',
+    remoteTable: 'month_budget_plan_events',
+    pullOrder: 6,
+    identityColumn: 'uuid',
+    fields: [
+      { local: 'month_key', remote: 'month_key' },
+      { local: 'kind', remote: 'kind' },
+      { local: 'budget_id', remote: 'budget_uuid', fk: true },
+      { local: 'previous_amount_cents', remote: 'previous_amount_cents' },
+      { local: 'new_amount_cents', remote: 'new_amount_cents' },
+      { local: 'funded_budget_id', remote: 'funded_budget_uuid', fk: true },
+    ],
+  }),
+  makeAdapter({
     localTable: 'income',
     remoteTable: 'income',
-    pullOrder: 6,
+    pullOrder: 7,
     identityColumn: 'uuid',
     fields: [
       { local: 'month_key', remote: 'month_key' },
@@ -186,7 +200,7 @@ export const COMPLETE_ADAPTERS: SyncTableAdapter[] = [
   makeAdapter({
     localTable: 'reserve_transfers',
     remoteTable: 'reserve_transfers',
-    pullOrder: 7,
+    pullOrder: 8,
     identityColumn: 'uuid',
     fields: [
       { local: 'month_key', remote: 'month_key' },
@@ -198,7 +212,7 @@ export const COMPLETE_ADAPTERS: SyncTableAdapter[] = [
   makeAdapter({
     localTable: 'transactions',
     remoteTable: 'transactions',
-    pullOrder: 8,
+    pullOrder: 9,
     identityColumn: 'uuid',
     fields: [
       { local: 'month_key', remote: 'month_key' },

@@ -83,6 +83,12 @@ export default function SettingsScreen() {
       <List.Section>
         <List.Subheader>Planning</List.Subheader>
         <List.Item
+          title="This month's plan"
+          description="Plan your budgets, and what you draw from the reserve"
+          left={(props) => <List.Icon {...props} icon="calendar-edit-outline" />}
+          onPress={() => router.push('/planning/month')}
+        />
+        <List.Item
           title="Fixed expenses"
           description="Recurring bills and how they are estimated"
           left={(props) => <List.Icon {...props} icon="calendar-check-outline" />}

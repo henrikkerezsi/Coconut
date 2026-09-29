@@ -36,6 +36,7 @@ describe('row serialization', () => {
       'budgets',
       'fixed_expenses',
       'income',
+      'month_budget_plan_events',
       'month_budgets',
       'month_fixed_expenses',
       'months',

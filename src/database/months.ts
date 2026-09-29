@@ -13,10 +13,12 @@ import {
   getActiveBudgets,
   getMonthBudgets,
   insertMonthBudget,
+  setMonthBudgetPlanned,
 } from './budgets';
 import { getSettings } from './settings';
 import { getAllSubscriptions } from './subscriptions';
 import { replaceMonthSubscriptions } from './monthSubscriptions';
+import { writeMonthPlanStart } from './monthPlan';
 import { estimateAmount } from '../services/estimation-service';
 import { subscriptionChargesForMonth } from '../services/subscription-service';
 
@@ -100,7 +102,7 @@ export async function insertMonth(
   );
 }
 
-async function computeStartingReserve(
+export async function computeStartingReserve(
   monthKey: MonthKey,
   db: SQLiteDatabase
 ): Promise<number> {
@@ -214,35 +216,63 @@ export async function materializeMonth(
   await materializeMonthSubscriptions(monthKey, database);
 }
 
+export interface PlannedMonthInput {
+  monthKey: MonthKey;
+  /** Planned amount per budget; a budget left out keeps its default amount. */
+  budgetPlans: Record<number, number>;
+  /**
+   * The reserve draw the user planned this month with. Recorded as the month's
+   * opening draw so that raising it later is a change against a known start; it
+   * moves no money and is not stored on the month itself.
+   */
+  drawCents: number;
+}
+
 /**
- * Makes sure the period the app is working on exists and is fully set up.
+ * Creates the month the app is about to work on, together with the plan the user
+ * laid out for it. This is the only way a month comes into existence: the app
+ * never creates one on its own, so the user always decides when a period starts
+ * and what it is planned to spend.
  *
- * Closing a month moves the app on to the next period, which may not exist yet,
- * so this creates it with the allowance and with the reserve balance the
- * previous month ended on.
+ * The month, its fixed expenses, its subscription charges and its budget plan
+ * are written in one transaction, so a month never exists half-planned.
  */
-export async function ensureActiveMonth(
-  monthKey: MonthKey,
+export async function createPlannedMonth(
+  input: PlannedMonthInput,
   db?: SQLiteDatabase
 ): Promise<Month> {
   const database = db ?? (await getDatabase());
-  const existing = await getMonth(monthKey, database);
-  if (!existing) {
+  await database.withTransactionAsync(async () => {
     const settings = await getSettings(database);
-    const startingReserve = await computeStartingReserve(monthKey, database);
+    const startingReserveCents = await computeStartingReserve(input.monthKey, database);
     await insertMonth(
       {
-        monthKey,
+        monthKey: input.monthKey,
         allowanceCents: settings.monthlyAllowanceCents,
-        startingReserveCents: startingReserve,
+        startingReserveCents,
       },
       database
     );
-  }
-  await materializeMonth(monthKey, database);
-  const month = await getMonth(monthKey, database);
+    await materializeMonth(input.monthKey, database);
+    for (const monthBudget of await getMonthBudgets(input.monthKey, database)) {
+      const plannedAmountCents = input.budgetPlans[monthBudget.budgetId];
+      if (plannedAmountCents !== undefined && plannedAmountCents !== monthBudget.plannedAmountCents) {
+        await setMonthBudgetPlanned(monthBudget.id, plannedAmountCents, database);
+      }
+    }
+    await writeMonthPlanStart(
+      input.monthKey,
+      (await getMonthBudgets(input.monthKey, database)).map((row) => ({
+        budgetId: row.budgetId,
+        plannedAmountCents: row.plannedAmountCents,
+      })),
+      input.drawCents,
+      database
+    );
+  });
+  const month = await getMonth(input.monthKey, database);
   if (!month) {
-    throw new Error(`Failed to create month ${monthKey}`);
+    throw new Error(`Failed to create month ${input.monthKey}`);
   }
   return month;
 }

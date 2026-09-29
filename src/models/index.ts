@@ -72,6 +72,41 @@ export interface MonthBudget {
 }
 
 /**
+ * What a plan change did to a month's plan, recorded when the user explicitly
+ * changes it so that later statistics can see how a plan was arrived at.
+ *
+ * Three kinds, one row each, so nothing is ever counted twice:
+ * - `initial` opens the record for a budget: the amount the month started at.
+ *   A plan that was set up before the record began opens with the amount as it
+ *   stood, which is a truthful starting point rather than a claim about a past
+ *   the record does not have.
+ * - `budget` is one explicit change to one budget's planned amount, up or down.
+ * - `draw` is one explicit change to the planned reserve draw. `fundedBudgetId`
+ *   names the budget the difference was handed to, which is how a raise reads
+ *   as "this budget got more because the reserve is being drawn down further".
+ *
+ * Nothing here moves money. A draw is a plan, and the reserve itself only ever
+ * moves at the end of a month, by the closing rule.
+ */
+export const MONTH_PLAN_EVENT_KINDS = ['initial', 'budget', 'draw'] as const;
+export type MonthPlanEventKind = (typeof MONTH_PLAN_EVENT_KINDS)[number];
+
+export interface MonthPlanEvent {
+  id: number;
+  monthKey: MonthKey;
+  kind: MonthPlanEventKind;
+  /** The budget the change is about; null for a draw, which is not a budget. */
+  budgetId: number | null;
+  /** The budget amount before the change; 0 when the record opens. */
+  previousAmountCents: number;
+  /** The budget amount after the change; the draw itself for a draw event. */
+  newAmountCents: number;
+  /** The budget a draw was handed to, when the user gave the money to one. */
+  fundedBudgetId: number | null;
+  createdAt: string;
+}
+
+/**
  * How much value a purchase turned out to be, set when the user reviews a month
  * before closing it. A missing rating means the user never judged the purchase
  * and counts as neutral, so the month can always be closed.

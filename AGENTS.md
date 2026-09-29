@@ -129,7 +129,12 @@ where a `.web` variant is the cleaner solution.
 - Queries are small named functions in `src/database/queries.ts` grouped by domain.
 - One repository module per aggregate: `months.ts`, `fixedExpenses.ts`,
   `budgets.ts`, `transactions.ts`, `settings.ts`, `reserve.ts`,
-  `sharedSpaces.ts`, `sharedPeriods.ts`, `sharedExpenses.ts`.
+  `sharedSpaces.ts`, `sharedPeriods.ts`, `sharedExpenses.ts`, `monthPlan.ts`.
+- A table that syncs and is added by a migration later than the first one declares its
+  own change-capture triggers in that migration (`syncTriggersForTablesSql`) and records
+  the migration it arrived in (`addedIn` in `SYNC_TABLE_SPECS`). Adding a table to
+  `SYNC_TABLE_SPECS` never widens the trigger SQL the earlier migrations already built,
+  because those migrations run against a database that does not have the table yet.
 
 ---
 

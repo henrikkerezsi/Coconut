@@ -9,6 +9,7 @@ interface AmountInputProps {
   autoFocus?: boolean;
   error?: string | null;
   prefix?: string;
+  allowNegative?: boolean;
 }
 
 function centsToRawInput(cents: number): string {
@@ -26,6 +27,7 @@ export function AmountInput({
   autoFocus,
   error,
   prefix,
+  allowNegative = false,
 }: AmountInputProps) {
   const [text, setText] = useState(() =>
     value === null ? '' : centsToRawInput(value)
@@ -46,6 +48,21 @@ export function AmountInput({
     onChange(nextCents);
   };
 
+  // The decimal pad on Android has no minus key, so the sign is flipped here
+  // rather than typed.
+  const flipSign = () => {
+    const current = centsFromString(text);
+    if (current === null || current === 0) {
+      return;
+    }
+    const next = -current;
+    lastEmitted.current = next;
+    setText(centsToRawInput(next));
+    onChange(next);
+  };
+
+  const negative = (value ?? 0) < 0;
+
   return (
     <>
       <PaperTextInput
@@ -57,6 +74,15 @@ export function AmountInput({
         autoFocus={autoFocus}
         error={Boolean(error)}
         left={prefix ? <PaperTextInput.Affix text={prefix} /> : undefined}
+        right={
+          allowNegative ? (
+            <PaperTextInput.Icon
+              icon={negative ? 'plus' : 'minus'}
+              onPress={flipSign}
+              accessibilityLabel={negative ? 'Make positive' : 'Make negative'}
+            />
+          ) : undefined
+        }
       />
       {error ? <HelperText type="error">{error}</HelperText> : null}
     </>

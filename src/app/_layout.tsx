@@ -7,6 +7,7 @@ import { buildNavigationTheme } from '../theme/navigation';
 import { DataProvider, useAppData } from '../data/DataProvider';
 import { UpdateNotifier } from '../components/update-notifier';
 import { AutoTutorial } from '../components/auto-tutorial';
+import { MonthPlanningOverlay } from '../components/month-planning-overlay';
 
 function ThemedContent() {
   const theme = useAppTheme();
@@ -74,6 +75,7 @@ function ThemedContent() {
           />
           <Stack.Screen name="monthly-history" options={{ title: 'Monthly History' }} />
           <Stack.Screen name="monthly-report/[monthKey]" options={{ title: 'Monthly Report' }} />
+          <Stack.Screen name="planning/month" options={{ title: "This Month's Plan" }} />
           <Stack.Screen
             name="planning/fixed-expenses"
             options={{ title: 'Fixed Expenses' }}
@@ -105,6 +107,7 @@ function ThemedContent() {
         </Stack>
         <UpdateNotifier />
         <AutoTutorial />
+        <MonthPlanningOverlay />
       </PaperProvider>
     </ThemeProvider>
   );

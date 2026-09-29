@@ -8,18 +8,22 @@ import { getTransaction } from '../../database/transactions';
 import { getExpenseTraceByOriginId, type SharedExpenseTrace } from '../../database/sharedExpenses';
 import { useAppData } from '../../data/DataProvider';
 import { TransactionForm } from '../../components/transaction-form';
+import { TransactionDetails } from '../../components/transaction-details';
 import { AttachmentField } from '../../components/attachment-field';
 import { BudgetSelect } from '../../components/budget-select';
 import { AppDialog } from '../../components/app-dialog';
 import { LoadingScreen } from '../../components/loading-screen';
 import { useAppTheme } from '../../theme';
 import { formatCents } from '../../utils/currency';
+import { monthLabel } from '../../utils/date';
 
 export default function EditTransactionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const {
     budgets,
     settings,
+    activeMonthKey,
+    allMonths,
     saveTransaction,
     saveTransactionAttachment,
     saveTransactionBudget,
@@ -107,6 +111,15 @@ export default function EditTransactionScreen() {
     void saveTransactionBudget(transaction.id, next);
   };
 
+  // A closed month is final, so its purchases are shown but never edited; only
+  // deleting and the rating recorded during the closing review remain possible.
+  const transactionMonth = allMonths.find((month) => month.monthKey === transaction.monthKey);
+  const isClosedMonth = transactionMonth?.isClosed ?? false;
+  const budgetName =
+    transaction.budgetId === null
+      ? null
+      : budgets.find((budget) => budget.id === transaction.budgetId)?.name ?? '';
+
   return (
     <KeyboardAwareScrollView contentContainerStyle={styles.container}>
       {trace ? (
@@ -138,21 +151,7 @@ export default function EditTransactionScreen() {
       ) : null}
       {transaction.originType === 'shared' ? (
         <View>
-          <List.Item
-            title={transaction.merchant}
-            description="Merchant"
-            left={(props) => <List.Icon {...props} icon="cash" />}
-          />
-          <List.Item
-            title={formatCents(transaction.amountCents, settings.currencySymbol)}
-            description="Amount"
-            left={(props) => <List.Icon {...props} icon="currency-eur" />}
-          />
-          <List.Item
-            title={transaction.date}
-            description="Date"
-            left={(props) => <List.Icon {...props} icon="calendar-outline" />}
-          />
+          <TransactionDetails transaction={transaction} symbol={settings.currencySymbol} />
           <BudgetSelect
             budgets={budgets}
             selectedId={budgetId}
@@ -164,28 +163,40 @@ export default function EditTransactionScreen() {
           </Text>
           <AttachmentField value={attachment} onChange={handleAttachmentChange} />
         </View>
-      ) : (
-        <>
-          <TransactionForm
-            initial={transaction}
-            budgets={budgets}
+      ) : isClosedMonth ? (
+        <View>
+          <TransactionDetails
+            transaction={transaction}
             symbol={settings.currencySymbol}
-            suggestMerchant={suggestBudgets}
-            onSubmit={async (input) => {
-              await saveTransaction(transaction.id, input);
-              router.back();
-            }}
+            budgetName={budgetName ?? ''}
           />
-          <View style={styles.deleteRow}>
-            <Button
-              mode="text"
-              textColor={theme.semantic.delete}
-              onPress={() => setConfirmDelete(true)}
-            >
-              Delete transaction
-            </Button>
-          </View>
-        </>
+          <Text variant="bodySmall" style={styles.closedHint}>
+            {`${monthLabel(transaction.monthKey)} is closed, so this transaction is read-only.`}
+          </Text>
+        </View>
+      ) : (
+        <TransactionForm
+          initial={transaction}
+          budgets={budgets}
+          symbol={settings.currencySymbol}
+          activeMonthKey={activeMonthKey}
+          suggestMerchant={suggestBudgets}
+          onSubmit={async (input) => {
+            await saveTransaction(transaction.id, input);
+            router.back();
+          }}
+        />
+      )}
+      {transaction.originType === 'shared' ? null : (
+        <View style={styles.deleteRow}>
+          <Button
+            mode="text"
+            textColor={theme.semantic.delete}
+            onPress={() => setConfirmDelete(true)}
+          >
+            Delete transaction
+          </Button>
+        </View>
       )}
       <Portal>
         <AppDialog visible={confirmDelete} onDismiss={() => setConfirmDelete(false)}>
@@ -236,6 +247,10 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   attachmentHint: {
+    marginTop: 12,
+    opacity: 0.6,
+  },
+  closedHint: {
     marginTop: 12,
     opacity: 0.6,
   },

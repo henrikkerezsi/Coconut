@@ -6,13 +6,14 @@ import { useAppData } from '../../data/DataProvider';
 import { IncomeForm } from '../../components/income-form';
 
 export default function NewIncomeScreen() {
-  const { settings, addIncome } = useAppData();
+  const { settings, activeMonthKey, addIncome } = useAppData();
   const router = useRouter();
 
   return (
     <KeyboardAwareScrollView contentContainerStyle={styles.container}>
       <IncomeForm
         symbol={settings.currencySymbol}
+        activeMonthKey={activeMonthKey}
         onSubmit={async (input) => {
           await addIncome(input);
           router.back();

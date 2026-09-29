@@ -1,3 +1,5 @@
+import type { SQLiteDatabase } from 'expo-sqlite';
+import dayjs, { type Dayjs } from 'dayjs';
 import React, {
   createContext,
   useCallback,
@@ -21,6 +23,7 @@ import type {
   Subscription,
   SyncState,
   Transaction,
+  TransactionRating,
 } from '../models';
 import { currentMonthKey } from '../utils/date';
 import { getDatabase } from '../database/database';
@@ -29,12 +32,10 @@ import { getSyncState, updateSyncState } from '../database/syncState';
 import { isValidApiKey, normalizeSupabaseUrl } from '../services/sync-service';
 import {
   closeMonth as persistCloseMonth,
-  ensureCurrentMonth,
+  ensureActiveMonth,
   getAllMonths,
   getMonth,
   materializeMonth,
-  materializeMonthSubscriptions,
-  reopenMonth as persistReopenMonth,
   updateMonthAllowance,
   updateMonthStartingReserve,
 } from '../database/months';
@@ -59,6 +60,7 @@ import {
   deleteTransaction as deleteTransactionRow,
   getTransaction,
   getRecentTransactions,
+  setTransactionRating,
   updateTransaction as updateTransactionRow,
   updateTransactionAttachment,
   updateTransactionBudget,
@@ -80,13 +82,19 @@ import {
 } from '../database/subscriptions';
 import {
   createReserveTransfer,
-  deleteReserveTransfer,
   getMerchantSuggestions,
+  getReserveTransfers,
   upsertMerchantSuggestion,
 } from '../database/reserve';
 import { getMonthData } from '../database/queries';
 import { syncSharedChanges } from '../sync/engine';
-import { projectReserve, type ReserveProjection } from '../services/reserve-service';
+import {
+  buildAutomaticReserveTransfer,
+  projectReserve,
+  type ReserveProjection,
+} from '../services/reserve-service';
+import { monthsRequiringAutoClose } from '../services/month-closing-service';
+import { resolveActiveMonth, validateDateInActiveMonth } from '../services/active-month-service';
 import {
   budgetStatus,
   forecastMonth,
@@ -126,10 +134,17 @@ interface AppData {
   recentTransactions: Transaction[];
   currentMonth: Month | null;
   currentDashboard: MonthDashboard | null;
+  /**
+   * The period the app is working on. It advances when a month is closed rather
+   * than with the calendar, so it can be ahead of or behind the calendar month.
+   */
+  activeMonthKey: MonthKey;
   allFixedExpenses: FixedExpense[];
   budgets: Budget[];
   allSubscriptions: Subscription[];
   allMonths: Month[];
+  /** The reserve movement applied when each month was closed, newest first. */
+  reserveHistory: ReserveTransfer[];
   dashboardFor: (monthKey: MonthKey) => Promise<MonthDashboard | null>;
   setMonthlyAllowance: (cents: number) => Promise<void>;
   setInitialReserve: (cents: number) => Promise<void>;
@@ -153,14 +168,9 @@ interface AppData {
   saveTransaction: (id: number, input: TransactionInput) => Promise<void>;
   saveTransactionAttachment: (id: number, attachment: Attachment | null) => Promise<void>;
   saveTransactionBudget: (id: number, budgetId: number | null) => Promise<void>;
+  setTransactionRating: (id: number, rating: TransactionRating) => Promise<void>;
   removeTransaction: (id: number) => Promise<void>;
   suggestBudgets: (merchant: string) => Promise<MerchantSuggestion[]>;
-  addReserveTransfer: (
-    amountCents: number,
-    direction: ReserveTransfer['direction'],
-    note: string | null
-  ) => Promise<void>;
-  removeReserveTransfer: (id: number) => Promise<void>;
   addIncome: (input: IncomeInput) => Promise<void>;
   saveIncome: (id: number, input: IncomeInput) => Promise<void>;
   removeIncome: (id: number) => Promise<void>;
@@ -168,20 +178,83 @@ interface AppData {
   saveSubscription: (id: number, input: SubscriptionInput) => Promise<void>;
   removeSubscription: (id: number) => Promise<void>;
   reorderSubscriptions: (orderedIds: number[]) => Promise<void>;
-  closeCurrentMonth: () => Promise<void>;
-  reopenCurrentMonth: () => Promise<void>;
+  closeCurrentMonth: (monthKey: MonthKey) => Promise<boolean>;
   refresh: () => Promise<void>;
   syncSharedAndRefresh: () => Promise<void>;
 }
 
 const DataContext = createContext<AppData | null>(null);
 
+/**
+ * Settles a month: stores the reserve balance it ended on and records the
+ * movement it applied. Returns false when the month was already closed, so the
+ * reserve movement is never recorded twice.
+ */
+async function settleMonth(monthKey: MonthKey, db: SQLiteDatabase): Promise<boolean> {
+  const dashboard = await buildDashboard(monthKey);
+  if (!dashboard) {
+    return false;
+  }
+  const closed = await persistCloseMonth(
+    monthKey,
+    dashboard.reserveProjection.endingReserveCents,
+    db
+  );
+  if (!closed) {
+    return false;
+  }
+  const transfer = buildAutomaticReserveTransfer(dashboard.reserveProjection.adjustmentCents);
+  await createReserveTransfer(monthKey, transfer.amountCents, transfer.direction, transfer.note, db);
+  return true;
+}
+
+/**
+ * Brings the dataset in line with the closing rules before the app reads it:
+ *
+ * 1. Every open month whose closing window has passed is settled, so a month the
+ *    user never got to close is finished rather than left open. Its reserve
+ *    adjustment is applied and recorded at that point.
+ * 2. The period the app is working on is then resolved and, when closing moved
+ *    the app on to a period that does not exist yet, created.
+ *
+ * Creating a period can expose another stale one behind it, so this repeats
+ * until the dataset is settled, bounded by the two years a long absence spans.
+ */
+const MAX_CATCH_UP_PERIODS = 24;
+
+async function catchUpOnClosings(db: SQLiteDatabase, now: Dayjs): Promise<MonthKey> {
+  const calendarKey = currentMonthKey();
+  for (let pass = 0; pass < MAX_CATCH_UP_PERIODS; pass += 1) {
+    for (const stale of monthsRequiringAutoClose(await getAllMonths(db), now)) {
+      await settleMonth(stale, db);
+    }
+    const active = resolveActiveMonth(await getAllMonths(db), calendarKey);
+    if (!active.needsMaterializing) {
+      return active.monthKey;
+    }
+    await ensureActiveMonth(active.monthKey, db);
+  }
+  return calendarKey;
+}
+
+/**
+ * Every record the user enters carries a date of its own, and a date only ever
+ * falls inside the active month (see idea.txt §3.0). Screens bound the date
+ * picker as well; this is the guard that keeps the rule true for every write.
+ */
+function assertActiveMonthDate(date: string, monthKey: MonthKey, subject: string): void {
+  const check = validateDateInActiveMonth(date, monthKey, subject);
+  if (!check.ok) {
+    throw new Error(check.error ?? 'The date is not inside the active month.');
+  }
+}
+
 async function buildDashboard(monthKey: MonthKey): Promise<MonthDashboard | null> {
   const data = await getMonthData(monthKey);
   if (!data) {
     return null;
   }
-  const { month, fixedExpenses, budgets, transactions, income, subscriptions, transfers } = data;
+  const { month, fixedExpenses, budgets, transactions, income, subscriptions } = data;
   const forecast = forecastMonth({
     month,
     income,
@@ -195,7 +268,6 @@ async function buildDashboard(monthKey: MonthKey): Promise<MonthDashboard | null
     actualSpendingCents: forecast.actualSpendingCents,
     allowanceCents: month.allowanceCents,
     incomeCents: forecast.incomeTotalCents,
-    transfers,
   });
 
   const [budgetDefinitions, fixedExpenseDefinitions] = await Promise.all([
@@ -277,14 +349,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [allSubscriptions, setAllSubscriptions] = useState<Subscription[]>([]);
   const [allMonths, setAllMonths] = useState<Month[]>([]);
+  const [reserveHistory, setReserveHistory] = useState<ReserveTransfer[]>([]);
+
+  // The period the app is working on, which advances on closing rather than with
+  // the calendar, so every write below lands on the month actually on screen.
+  const activeMonthKey = currentMonth?.monthKey ?? currentMonthKey();
 
   const loadLocal = useCallback(async () => {
     const db = await getDatabase();
-    const monthKey = currentMonthKey();
-    await ensureCurrentMonth(db);
-    // Keeps the current month in step with subscriptions that arrived by sync;
-    // months that are already closed keep their frozen charges.
-    await materializeMonthSubscriptions(monthKey, db);
+    const monthKey = await catchUpOnClosings(db, dayjs());
 
     const nextSettings = await getSettings(db);
     setSettings(nextSettings);
@@ -297,6 +370,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setBudgets(await getAllBudgets(db));
     setAllSubscriptions(await getAllSubscriptions(db));
     setAllMonths(await getAllMonths(db));
+    setReserveHistory(await getReserveTransfers(60, db));
   }, []);
 
   const refresh = useCallback(async () => {
@@ -351,15 +425,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       recentTransactions,
       currentMonth,
       currentDashboard,
+      activeMonthKey,
       allFixedExpenses,
       budgets,
       allSubscriptions,
       allMonths,
+      reserveHistory,
       dashboardFor: buildDashboard,
       setMonthlyAllowance: async (cents) => {
         const db = await getDatabase();
         await updateSettings({ monthlyAllowanceCents: cents }, db);
-        await updateMonthAllowance(currentMonthKey(), cents, db);
+        await updateMonthAllowance(activeMonthKey, cents, db);
         await refresh();
       },
       setInitialReserve: async (cents) => {
@@ -409,13 +485,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const db = await getDatabase();
         const sortOrder = allFixedExpenses.length;
         await createFixedExpense({ ...input, sortOrder }, db);
-        await materializeMonth(currentMonthKey(), db);
+        await materializeMonth(activeMonthKey, db);
         await refresh();
       },
       saveFixedExpense: async (id, input) => {
         const db = await getDatabase();
         await updateFixedExpenseRow(id, input, db);
-        await materializeMonth(currentMonthKey(), db);
+        await materializeMonth(activeMonthKey, db);
         await refresh();
       },
       removeFixedExpense: async (id) => {
@@ -437,7 +513,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const db = await getDatabase();
         const sortOrder = budgets.length;
         await createBudget({ ...input, sortOrder }, db);
-        await materializeMonth(currentMonthKey(), db);
+        await materializeMonth(activeMonthKey, db);
         await refresh();
       },
       saveBudget: async (id, input) => {
@@ -462,6 +538,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       },
       addTransaction: async (input) => {
         const db = await getDatabase();
+        assertActiveMonthDate(input.date, activeMonthKey, 'A transaction');
         await createTransaction(input, db);
         await upsertMerchantSuggestion(input.merchant, input.budgetId, db);
         await refresh();
@@ -472,6 +549,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         if (existing?.originType === 'shared') {
           return;
         }
+        assertActiveMonthDate(input.date, activeMonthKey, 'A transaction');
         await updateTransactionRow(id, input, db);
         await upsertMerchantSuggestion(input.merchant, input.budgetId, db);
         await refresh();
@@ -479,6 +557,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       saveTransactionAttachment: async (id, attachment) => {
         const db = await getDatabase();
         await updateTransactionAttachment(id, attachment, db);
+        await refresh();
+      },
+      setTransactionRating: async (id, rating) => {
+        const db = await getDatabase();
+        await setTransactionRating(id, rating, db);
         await refresh();
       },
       saveTransactionBudget: async (id, budgetId) => {
@@ -496,23 +579,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         await refresh();
       },
       suggestBudgets: getMerchantSuggestions,
-      addReserveTransfer: async (amountCents, direction, note) => {
-        const db = await getDatabase();
-        await createReserveTransfer(currentMonthKey(), amountCents, direction, note, db);
-        await refresh();
-      },
-      removeReserveTransfer: async (id) => {
-        const db = await getDatabase();
-        await deleteReserveTransfer(id, db);
-        await refresh();
-      },
       addIncome: async (input) => {
         const db = await getDatabase();
+        assertActiveMonthDate(input.date, activeMonthKey, 'One-off income');
         await createIncome(input, db);
         await refresh();
       },
       saveIncome: async (id, input) => {
         const db = await getDatabase();
+        assertActiveMonthDate(input.date, activeMonthKey, 'One-off income');
         await updateIncomeRow(id, input, db);
         await refresh();
       },
@@ -525,19 +600,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const db = await getDatabase();
         const sortOrder = allSubscriptions.length;
         await createSubscription({ ...input, sortOrder }, db);
-        await materializeMonth(currentMonthKey(), db);
+        await materializeMonth(activeMonthKey, db);
         await refresh();
       },
       saveSubscription: async (id, input) => {
         const db = await getDatabase();
         await updateSubscriptionRow(id, input, db);
-        await materializeMonth(currentMonthKey(), db);
+        await materializeMonth(activeMonthKey, db);
         await refresh();
       },
       removeSubscription: async (id) => {
         const db = await getDatabase();
         await deleteSubscriptionRow(id, db);
-        await materializeMonth(currentMonthKey(), db);
+        await materializeMonth(activeMonthKey, db);
         await refresh();
       },
       reorderSubscriptions: async (orderedIds) => {
@@ -545,22 +620,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         await reorderSubscriptions(orderedIds, db);
         await refresh();
       },
-      closeCurrentMonth: async () => {
-        const monthKey = currentMonthKey();
-        const dashboard = await buildDashboard(monthKey);
-        if (dashboard) {
-          await persistCloseMonth(monthKey, dashboard.reserveProjection.endingReserveCents);
-          await refresh();
-        }
-      },
-      reopenCurrentMonth: async () => {
-        await persistReopenMonth(currentMonthKey());
+      closeCurrentMonth: async (monthKey) => {
+        const db = await getDatabase();
+        const closed = await settleMonth(monthKey, db);
         await refresh();
+        return closed;
       },
       refresh,
       syncSharedAndRefresh,
     };
-  }, [ready, settings, syncState, recentTransactions, currentMonth, currentDashboard, allFixedExpenses, budgets, allSubscriptions, allMonths, refresh, syncSharedAndRefresh]);
+  }, [ready, settings, syncState, recentTransactions, currentMonth, currentDashboard, allFixedExpenses, budgets, allSubscriptions, allMonths, reserveHistory, activeMonthKey, refresh, syncSharedAndRefresh]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

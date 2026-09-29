@@ -1,20 +1,30 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Chip, Text, TextInput } from 'react-native-paper';
-import type { Attachment, Budget, MerchantSuggestion, Transaction } from '../models';
+import type { Attachment, Budget, MerchantSuggestion, MonthKey, Transaction } from '../models';
 import { AmountInput } from './amount-input';
 import { BudgetSelect } from './budget-select';
 import { AttachmentField } from './attachment-field';
 import { DateField } from './date-field';
-import { DAYJS_STORE_DATE_FORMAT } from '../utils/date';
+import { DAYJS_STORE_DATE_FORMAT, monthLabel } from '../utils/date';
 import dayjs from 'dayjs';
 import type { TransactionInput } from '../database/transactions';
 import { useAppTheme } from '../theme';
+import {
+  activeMonthDateWindow,
+  clampToActiveMonth,
+  validateDateInActiveMonth,
+} from '../services/active-month-service';
 
 interface TransactionFormProps {
   initial?: Transaction;
   budgets: Budget[];
   symbol: string;
+  /**
+   * The period the app is working on. A transaction can only be dated inside
+   * it, so the date picker is limited to that month.
+   */
+  activeMonthKey: MonthKey;
   suggestMerchant: (merchant: string) => Promise<MerchantSuggestion[]>;
   onSubmit: (input: TransactionInput) => Promise<void>;
 }
@@ -23,6 +33,7 @@ export function TransactionForm({
   initial,
   budgets,
   symbol,
+  activeMonthKey,
   suggestMerchant,
   onSubmit,
 }: TransactionFormProps) {
@@ -30,7 +41,20 @@ export function TransactionForm({
   const [merchant, setMerchant] = useState(initial?.merchant ?? '');
   const [note, setNote] = useState(initial?.note ?? '');
   const [budgetId, setBudgetId] = useState<number | null>(initial?.budgetId ?? null);
-  const [date, setDate] = useState(initial?.date ?? dayjs().format(DAYJS_STORE_DATE_FORMAT));
+  const [date, setDate] = useState(() =>
+    clampToActiveMonth(
+      initial?.date ?? dayjs().format(DAYJS_STORE_DATE_FORMAT),
+      activeMonthKey
+    )
+  );
+  // The active month can arrive after the form opened, and moves on when a month
+  // is closed while the form is still up, so a date that no longer fits the
+  // active month is pulled into it.
+  const [dateMonthKey, setDateMonthKey] = useState(activeMonthKey);
+  if (dateMonthKey !== activeMonthKey) {
+    setDateMonthKey(activeMonthKey);
+    setDate(clampToActiveMonth(date, activeMonthKey));
+  }
   const [attachment, setAttachment] = useState<Attachment | null>(
     initial?.attachment
       ? {
@@ -44,6 +68,7 @@ export function TransactionForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const theme = useAppTheme();
+  const dateWindow = activeMonthDateWindow(activeMonthKey);
 
   useEffect(() => {
     const trimmed = merchant.trim();
@@ -75,6 +100,11 @@ export function TransactionForm({
       setError('Enter a merchant or description.');
       return;
     }
+    const dateCheck = validateDateInActiveMonth(date, activeMonthKey, 'A transaction');
+    if (!dateCheck.ok) {
+      setError(dateCheck.error);
+      return;
+    }
     setSubmitting(true);
     try {
       await onSubmit({
@@ -85,6 +115,12 @@ export function TransactionForm({
         note: note.trim().length > 0 ? note.trim() : null,
         attachment,
       });
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : 'The transaction could not be saved.'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -134,7 +170,15 @@ export function TransactionForm({
         style={styles.field}
       />
       <AttachmentField value={attachment} onChange={setAttachment} />
-      <DateField value={date} onChange={setDate} />
+      <DateField
+        value={date}
+        onChange={setDate}
+        minimumDate={dateWindow.minimumDate}
+        maximumDate={dateWindow.maximumDate}
+      />
+      <Text variant="labelSmall" style={[styles.monthHint, { color: theme.text.secondary }]}>
+        {`Dates are limited to ${monthLabel(activeMonthKey)}.`}
+      </Text>
       <Button mode="contained" onPress={handleSubmit} loading={submitting} disabled={submitting} style={styles.submit}>
         Save
       </Button>
@@ -167,6 +211,9 @@ const styles = StyleSheet.create({
   },
   submit: {
     marginTop: 20,
+  },
+  monthHint: {
+    marginTop: 2,
   },
   error: {
     marginTop: 8,

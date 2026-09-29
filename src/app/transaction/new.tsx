@@ -6,7 +6,7 @@ import { useAppData } from '../../data/DataProvider';
 import { TransactionForm } from '../../components/transaction-form';
 
 export default function NewTransactionScreen() {
-  const { budgets, settings, addTransaction, suggestBudgets } = useAppData();
+  const { budgets, settings, activeMonthKey, addTransaction, suggestBudgets } = useAppData();
   const router = useRouter();
 
   return (
@@ -14,6 +14,7 @@ export default function NewTransactionScreen() {
       <TransactionForm
         budgets={budgets}
         symbol={settings.currencySymbol}
+        activeMonthKey={activeMonthKey}
         suggestMerchant={suggestBudgets}
         onSubmit={async (input) => {
           await addTransaction(input);

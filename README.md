@@ -37,7 +37,7 @@ person's split, so the shared record and the personal budgets never drift apart.
 - **Flexible budgets** — discretionary spending categories planned per month, with actual-versus-planned tracking per budget.
 - **One-off income** — a bonus or gift is added to the month's available money; whatever is unused stays in the reserve.
 - **Yearly subscriptions** — spread a once-a-year charge across the year as a flat monthly amount, optionally deducted from each month's available funds, with a renewal-month reminder.
-- **Savings reserve** — start/end balance per month, transfers between the reserve and the month, and a month-end surplus that moves into savings automatically. A positive adjustment means you saved; a negative one means spending drew from the reserve.
+- **Savings reserve** — start/end balance per month and a month-end surplus that moves into savings automatically when the month is closed. A positive adjustment means you saved; a negative one means spending drew from the reserve.
 - **Transactions** — unlimited entries tagged to a budget (with merchant-based budget suggestions) and optional photo attachments.
 - **Statistics** — spending trends, averages, reserve development, and per-category performance over time.
 - **Shared expenses** — create a Shared Space with one or more trusted users and track expenses with arbitrary per-person splits inside a Shared Period. Closing a period auto-generates a permanent report (who paid, who owes whom); each participant gets an automatically-maintained linked personal transaction.

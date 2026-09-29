@@ -7,12 +7,10 @@ import type {
   MonthFixedExpense,
   MonthKey,
   MonthSubscription,
-  ReserveTransfer,
   Transaction,
 } from '../models';
 import { budgetStatus, fixedExpenseAmount, incomeTotal, transactionTotal } from './forecast-service';
 import { reserveAdjustmentCents } from './allowance-service';
-import { sumTransfers } from './reserve-service';
 import { spendingByCategory } from './statistics-service';
 
 export interface MonthlyReportFixedExpense {
@@ -41,7 +39,6 @@ export interface MonthlyReportInput {
   transactions: Transaction[];
   income: Income[];
   subscriptions: MonthSubscription[];
-  transfers: ReserveTransfer[];
   fixedExpenseDefinitions: Record<number, FixedExpense>;
   budgetDefinitions: Record<number, Budget>;
 }
@@ -58,7 +55,6 @@ export interface MonthlyReport {
   budgets: MonthlyReportBudget[];
   budgetSpentTotalCents: number;
   startingReserveCents: number;
-  transferNetCents: number;
   adjustmentCents: number;
   endingReserveCents: number | null;
 }
@@ -148,7 +144,6 @@ export function buildMonthlyReport(input: MonthlyReportInput): MonthlyReport {
     input.month.allowanceCents,
     incomeCents
   ).adjustmentCents;
-  const transferNetCents = sumTransfers(input.transfers).netCents;
 
   return {
     monthKey: input.month.monthKey,
@@ -162,7 +157,6 @@ export function buildMonthlyReport(input: MonthlyReportInput): MonthlyReport {
     budgets,
     budgetSpentTotalCents,
     startingReserveCents: input.month.startingReserveCents,
-    transferNetCents,
     adjustmentCents,
     endingReserveCents: input.month.endingReserveCents,
   };

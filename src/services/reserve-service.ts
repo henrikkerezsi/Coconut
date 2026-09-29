@@ -1,72 +1,65 @@
 import type { ReserveTransfer } from '../models';
 import { reserveAdjustmentCents } from './allowance-service';
 
-export interface TransferTotals {
-  toMonthCents: number;
-  toReserveCents: number;
-  netCents: number;
-}
-
-export function sumTransfers(transfers: ReserveTransfer[]): TransferTotals {
-  let toMonthCents = 0;
-  let toReserveCents = 0;
-  for (const transfer of transfers) {
-    if (transfer.direction === 'to-month') {
-      toMonthCents += transfer.amountCents;
-    } else {
-      toReserveCents += transfer.amountCents;
-    }
-  }
-  return {
-    toMonthCents,
-    toReserveCents,
-    netCents: toReserveCents - toMonthCents,
-  };
-}
+export const AUTOMATIC_TRANSFER_NOTE = 'Automatic month close';
 
 export interface ReserveProjectionInput {
   startingReserveCents: number;
   actualSpendingCents: number;
   allowanceCents: number;
   incomeCents?: number;
-  transfers: ReserveTransfer[];
 }
 
 export interface ReserveProjection {
   startingReserveCents: number;
   endingReserveCents: number;
-  /** The projected reserve from this month's own money, without manual transfers. */
-  endingReserveBeforeTransfersCents: number;
   adjustmentCents: number;
   overspent: boolean;
-  transferNetCents: number;
 }
 
 /**
  * Computes the ending reserve for a month:
  *
- *   ending = starting + transfers_to_reserve - transfers_to_month + (allowance + income - spending)
+ *   ending = starting + (allowance + income - spending)
  *
  * The monthly adjustment (allowance + income - spending) grows the reserve when
  * the month came in under its available funds and reduces it when spending
- * exceeded them. Reserve transfers are tracked separately from spending.
+ * exceeded them. There is no manual reserve transfer: the adjustment itself is
+ * the only movement between the month and the reserve.
  */
 export function projectReserve(input: ReserveProjectionInput): ReserveProjection {
-  const { startingReserveCents, actualSpendingCents, allowanceCents, incomeCents = 0, transfers } = input;
-  const { netCents } = sumTransfers(transfers);
+  const { startingReserveCents, actualSpendingCents, allowanceCents, incomeCents = 0 } = input;
   const { adjustmentCents, overspent } = reserveAdjustmentCents(
     actualSpendingCents,
     allowanceCents,
     incomeCents
   );
-  const endingReserveCents = startingReserveCents + netCents + adjustmentCents;
   return {
     startingReserveCents,
-    endingReserveCents,
-    endingReserveBeforeTransfersCents: startingReserveCents + adjustmentCents,
+    endingReserveCents: startingReserveCents + adjustmentCents,
     adjustmentCents,
     overspent,
-    transferNetCents: netCents,
+  };
+}
+
+export interface AutomaticReserveTransfer {
+  amountCents: number;
+  direction: ReserveTransfer['direction'];
+  note: string;
+}
+
+/**
+ * Derives the reserve movement recorded when a month is closed. A positive
+ * adjustment is money the month did not spend and therefore flows into the
+ * reserve; a negative one is spending above the available funds, drawn out of
+ * the reserve into the month. This is an audit record only and is never fed
+ * back into the projection, which is derived from spending alone.
+ */
+export function buildAutomaticReserveTransfer(adjustmentCents: number): AutomaticReserveTransfer {
+  return {
+    amountCents: Math.abs(adjustmentCents),
+    direction: adjustmentCents < 0 ? 'to-month' : 'to-reserve',
+    note: AUTOMATIC_TRANSFER_NOTE,
   };
 }
 

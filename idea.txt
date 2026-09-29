@@ -64,9 +64,80 @@ actual spending is below the allowance.
 
 The resulting reserve balance carries forward into subsequent months.
 
-Additional transfers from the reserve into the current month's available funds are
-supported and tracked separately from ordinary spending, so that transferring money does
-not incorrectly appear as an expense.
+There is no manual transfer between the reserve and the current month. The adjustment
+above is the only movement between the two, and it is applied by the app when the month
+is closed. Each closing records the movement it applied as a permanent entry in the
+reserve history, so that the movement can be audited per month. The reserve history
+lists every one of these movements, newest first, showing for each closed month whether
+the adjustment added to the reserve or drew from it.
+
+Closing a month is final. A closed month cannot be reopened or edited; corrections are
+made by editing the current month before closing it.
+
+### 3.0 Which month the app is on
+
+The month changes when a month is closed, and at no other time. The calendar moving on
+does not move the app on.
+
+The period shown is therefore the oldest month that is still open. Closing a month
+immediately starts the next period, so closing September moves the app to October even
+while it is still technically September. The other way round, on the 1st of October a
+September that has not been closed yet keeps the app on September, because that month
+is still the one being worked on.
+
+When every month is closed, the period after the latest one becomes the active period
+and is created, carrying the reserve balance the last closed month ended on. A period
+that has already gone by is never created, so a month the user skipped entirely is not
+filled in with invented history.
+
+### 3.0.1 What can be dated
+
+Only the active month accepts new records, and a record can only carry a date inside
+that month: from its first day to its last. Nothing can be backdated into a month that
+has been closed, and nothing can be dated ahead into a month that has not been worked on.
+
+Because the active period follows closing and not the calendar, this has a visible
+consequence. Closing September on the 30th moves the app to October, so on that 30th the
+only dates that can be recorded are October dates. The other way round, on the 1st of
+October an unclosed September keeps September active, so only September dates can be
+recorded and the picker will not even offer an October one.
+
+A record that already belongs to a closed month is shown as it was and can no longer be
+edited, since a closed month is final.
+
+### 3.1 The closing window
+
+A month can be closed from 36 hours before it ends until 24 hours after it ended, a
+window of 60 hours. For a month that ends at midnight, the window therefore opens at
+noon, one and a half days before the last day, and closes at midnight at the end of the
+1st of the following month. Because the window reaches into the following month, a month
+can still be closed on the 1st.
+
+While the window is open, the overview shows a prompt that the month is coming to an end
+and offers to close it. The prompt is shown on the overview screen only.
+
+Once the window has passed, the application closes the month itself. Any purchase the
+user did not judge is recorded as neutral, so a month is never left open and unsettled
+and the reserve balance of the following month is never carried from a stale figure.
+
+### 3.2 Closing a month
+
+Closing a month is a review of that month, presented on one screen:
+
+- How much was spent in total, and how much of that went to fixed expenses and to
+  subscriptions.
+- How much each budget received.
+- Every transaction of the month, each with a three-stop judgement of how much value the
+  purchase turned out to be: regret, neutral, or good. A purchase that is not judged is
+  neutral, and this is the whole purpose of the review, so the user can look back and see
+  how usefully they spent their money. The judgements are kept for later statistics.
+- A purchase that is derived from a shared expense is judged like any other. The
+  judgement is kept on the user's own copy of the purchase and survives a later change
+  to the shared expense.
+
+The final action is closing the month, which first asks for confirmation and states that
+it is final and cannot be undone. Confirming closes the month, records the reserve
+movement, and presents the closing report of that month.
 
 ---
 
@@ -132,7 +203,8 @@ A transaction contains:
 - Merchant or description.
 - Optional note.
 
-Transactions are manually entered by the user.
+Transactions are manually entered by the user. A transaction can only be dated inside
+the active month (see §3.0.1), so the date picker offers no other days.
 
 Transactions may also originate from a shared expense: each participant gets exactly one
 linked personal transaction whose amount equals that participant's split. Linked

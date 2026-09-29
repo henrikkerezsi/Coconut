@@ -8,7 +8,6 @@ import type {
   MonthFixedExpense,
   MonthKey,
   MonthSubscription,
-  ReserveTransfer,
   Transaction,
 } from '../models';
 import { getDatabase } from './database';
@@ -18,7 +17,6 @@ import { getMonthFixedExpenses } from './fixedExpenses';
 import { getAllTransactions, getMonthTransactions } from './transactions';
 import { getMonthIncome } from './income';
 import { getMonthSubscriptions } from './monthSubscriptions';
-import { getMonthTransfers } from './reserve';
 import { forecastMonth } from '../services/forecast-service';
 import { spendingByCategory } from '../services/statistics-service';
 
@@ -29,7 +27,6 @@ export interface MonthData {
   transactions: Transaction[];
   income: Income[];
   subscriptions: MonthSubscription[];
-  transfers: ReserveTransfer[];
 }
 
 export interface MonthDataWithDefinitions extends MonthData {
@@ -46,15 +43,14 @@ export async function getMonthData(
   if (!month) {
     return null;
   }
-  const [fixedExpenses, budgets, transactions, income, subscriptions, transfers] = await Promise.all([
+  const [fixedExpenses, budgets, transactions, income, subscriptions] = await Promise.all([
     getMonthFixedExpenses(monthKey, database),
     getMonthBudgets(monthKey, database),
     getMonthTransactions(monthKey, database),
     getMonthIncome(monthKey, database),
     getMonthSubscriptions(monthKey, database),
-    getMonthTransfers(monthKey, database),
   ]);
-  return { month, fixedExpenses, budgets, transactions, income, subscriptions, transfers };
+  return { month, fixedExpenses, budgets, transactions, income, subscriptions };
 }
 
 export async function getPreviousMonthData(

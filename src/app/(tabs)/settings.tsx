@@ -74,7 +74,7 @@ export default function SettingsScreen() {
         />
         <List.Item
           title="Savings reserve"
-          description="Transfers, closing, initial reserve"
+          description="Closing, initial reserve"
           left={(props) => <List.Icon {...props} icon="piggy-bank-outline" />}
           onPress={() => router.push('/planning/reserve')}
         />

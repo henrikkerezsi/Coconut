@@ -209,6 +209,7 @@ export const COMPLETE_ADAPTERS: SyncTableAdapter[] = [
       { local: 'note', remote: 'note' },
       { local: 'origin_type', remote: 'origin_type' },
       { local: 'origin_id', remote: 'origin_id' },
+      { local: 'rating', remote: 'rating' },
     ],
   }),
 ];

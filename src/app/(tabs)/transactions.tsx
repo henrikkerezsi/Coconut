@@ -21,19 +21,24 @@ interface TransactionSection {
 }
 
 export default function TransactionsScreen() {
-  const { ready, settings, currentDashboard, dashboardFor } = useAppData();
+  const { ready, settings, currentMonth, currentDashboard, dashboardFor } = useAppData();
   const router = useRouter();
   const theme = useAppTheme();
   const [query, setQuery] = useState('');
   const todayMonthKey = currentMonthKey();
-  const [monthKey, setMonthKey] = useState<MonthKey>(todayMonthKey);
+  // The app works on the active month, which advances on closing rather than
+  // with the calendar. The list follows it until the user picks another month.
+  const activeMonthKey = currentMonth?.monthKey ?? todayMonthKey;
+  const [selectedMonthKey, setSelectedMonthKey] = useState<MonthKey | null>(null);
+  const monthKey = selectedMonthKey ?? activeMonthKey;
   const [monthDashboard, setMonthDashboard] = useState<MonthDashboard | null>(currentDashboard);
   const [loadingMonth, setLoadingMonth] = useState(false);
 
-  const viewingCurrentMonth = monthKey === todayMonthKey;
+  const viewingActiveMonth = monthKey === activeMonthKey;
+  const latestMonthKey = activeMonthKey > todayMonthKey ? activeMonthKey : todayMonthKey;
 
   useEffect(() => {
-    if (viewingCurrentMonth) {
+    if (viewingActiveMonth) {
       return;
     }
     let active = true;
@@ -53,17 +58,17 @@ export default function TransactionsScreen() {
     return () => {
       active = false;
     };
-  }, [monthKey, viewingCurrentMonth, currentDashboard, dashboardFor]);
+  }, [monthKey, viewingActiveMonth, currentDashboard, dashboardFor]);
 
   const changeMonth = (next: MonthKey) => {
     if (next !== monthKey) {
-      setMonthKey(next);
+      setSelectedMonthKey(next === activeMonthKey ? null : next);
       setMonthDashboard(null);
-      setLoadingMonth(next !== todayMonthKey);
+      setLoadingMonth(next !== activeMonthKey);
     }
   };
 
-  const dashboard = viewingCurrentMonth ? currentDashboard : monthDashboard;
+  const dashboard = viewingActiveMonth ? currentDashboard : monthDashboard;
 
   const filtered = useMemo(() => {
     if (!dashboard) {
@@ -106,7 +111,7 @@ export default function TransactionsScreen() {
       <Tabs.Screen
         options={{
           headerRight: () => (
-            <MonthSwitcher value={monthKey} onChange={changeMonth} max={todayMonthKey} />
+            <MonthSwitcher value={monthKey} onChange={changeMonth} max={latestMonthKey} />
           ),
         }}
       />
@@ -140,15 +145,15 @@ export default function TransactionsScreen() {
                 message={
                   query.trim().length > 0
                     ? 'No transactions match your search.'
-                    : viewingCurrentMonth
+                    : viewingActiveMonth
                       ? 'No transactions this month yet.'
                       : 'No transactions in this month.'
                 }
                 actionLabel={
-                  query.trim().length > 0 || !viewingCurrentMonth ? undefined : 'Add a transaction'
+                  query.trim().length > 0 || !viewingActiveMonth ? undefined : 'Add a transaction'
                 }
                 onAction={
-                  query.trim().length > 0 || !viewingCurrentMonth
+                  query.trim().length > 0 || !viewingActiveMonth
                     ? undefined
                     : () => router.push('/transaction/new')
                 }
@@ -204,7 +209,7 @@ export default function TransactionsScreen() {
             )}
           />
         )}
-        {viewingCurrentMonth ? (
+        {viewingActiveMonth ? (
           <FAB icon="plus" style={styles.fab} onPress={() => router.push('/transaction/new')} />
         ) : null}
         </View>

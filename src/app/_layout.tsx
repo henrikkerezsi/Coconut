@@ -91,6 +91,10 @@ function ThemedContent() {
             options={{ title: 'Savings Reserve' }}
           />
           <Stack.Screen
+            name="planning/close-month"
+            options={{ title: 'Close Month', headerShown: false }}
+          />
+          <Stack.Screen
             name="planning/backup"
             options={{ title: 'Backup & Restore' }}
           />

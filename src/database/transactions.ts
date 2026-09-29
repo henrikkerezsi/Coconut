@@ -1,5 +1,11 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
-import type { Attachment, MonthKey, Transaction } from '../models';
+import {
+  TRANSACTION_RATINGS,
+  type Attachment,
+  type MonthKey,
+  type Transaction,
+  type TransactionRating,
+} from '../models';
 import { monthKeyOf } from '../utils/date';
 import { getDatabase } from './database';
 
@@ -16,10 +22,11 @@ interface TransactionRow {
   attachment: ArrayBuffer | Uint8Array | null;
   origin_type: string | null;
   origin_id: string | null;
+  rating: string | null;
 }
 
 const LIST_COLUMNS =
-  'id, month_key, date, amount_cents, budget_id, merchant, note, created_at, attachment_name, attachment_mime, origin_type, origin_id';
+  'id, month_key, date, amount_cents, budget_id, merchant, note, created_at, attachment_name, attachment_mime, origin_type, origin_id, rating';
 
 function rowToTransaction(row: TransactionRow): Transaction {
   return {
@@ -35,7 +42,12 @@ function rowToTransaction(row: TransactionRow): Transaction {
     attachment: row.attachment ? new Uint8Array(row.attachment) : null,
     originType: row.origin_type ?? null,
     originId: row.origin_id ?? null,
+    rating: toRating(row.rating),
   };
+}
+
+function toRating(value: string | null): TransactionRating | null {
+  return TRANSACTION_RATINGS.find((rating) => rating === value) ?? null;
 }
 
 export interface TransactionInput {
@@ -169,6 +181,20 @@ export async function updateTransactionAttachment(
   );
 }
 
+/**
+ * Records how much value a purchase turned out to be. Safe on a shared-derived
+ * transaction: re-deriving it updates the same row in place and leaves the
+ * rating, like the budget and attachment, untouched.
+ */
+export async function setTransactionRating(
+  id: number,
+  rating: TransactionRating,
+  db?: SQLiteDatabase
+): Promise<void> {
+  const database = db ?? (await getDatabase());
+  await database.runAsync('UPDATE transactions SET rating = ? WHERE id = ?', [rating, id]);
+}
+
 export async function updateTransactionBudget(
   id: number,
   budgetId: number | null,
@@ -201,9 +227,9 @@ export async function upsertSharedTransaction(
     [originId]
   );
   if (existing) {
-    // Keep the locally-attached file and the user-chosen budget untouched when
-    // re-deriving the linked transaction; both are editable on the mirror and
-    // must survive shared-expense changes.
+    // Keep the locally-attached file, the user-chosen budget and the value
+    // rating untouched when re-deriving the linked transaction; all three are
+    // editable on the mirror and must survive shared-expense changes.
     const monthKey = monthKeyOf(input.date);
     await database.runAsync(
       `UPDATE transactions SET month_key = ?, date = ?, amount_cents = ?, merchant = ?, note = ?

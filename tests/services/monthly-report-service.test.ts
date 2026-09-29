@@ -6,7 +6,6 @@ import type {
   MonthBudget,
   MonthFixedExpense,
   MonthSubscription,
-  ReserveTransfer,
   Transaction,
 } from '../../src/models';
 import {
@@ -72,6 +71,7 @@ function transaction(budgetId: number | null, amountCents: number): Transaction 
     attachmentName: null,
     attachmentMime: null,
     attachment: null,
+    rating: null,
   };
 }
 
@@ -97,10 +97,6 @@ function income(amountCents: number): Income {
   };
 }
 
-function transfer(direction: ReserveTransfer['direction'], amountCents: number): ReserveTransfer {
-  return { id: 1, monthKey: MONTH_KEY, amountCents, direction, note: null };
-}
-
 function month(partial: Partial<Month> = {}): Month {
   return {
     monthKey: MONTH_KEY,
@@ -121,7 +117,6 @@ function input(overrides: Partial<MonthlyReportInput> = {}): MonthlyReportInput 
     transactions: [],
     income: [],
     subscriptions: [],
-    transfers: [],
     fixedExpenseDefinitions: {},
     budgetDefinitions: {},
     ...overrides,
@@ -230,7 +225,6 @@ describe('buildMonthlyReport', () => {
         transactions: [transaction(1, 8000)],
         subscriptions: [charge({ id: 1, amountCents: 500 })],
         income: [income(10000)],
-        transfers: [transfer('to-reserve', 2000)],
         fixedExpenseDefinitions: { 1: fixedExpense(1, 'Rent') },
         budgetDefinitions: { 1: budget(1, 'Groceries') },
       })
@@ -240,7 +234,6 @@ describe('buildMonthlyReport', () => {
     expect(report.budgetSpentTotalCents).toBe(8000);
     expect(report.spendingCents).toBe(38500);
     expect(report.adjustmentCents).toBe(21500);
-    expect(report.transferNetCents).toBe(2000);
   });
 
   it('reports a negative adjustment when spending exceeds available funds', () => {

@@ -2,6 +2,10 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import type { MerchantSuggestion, MonthKey, ReserveTransfer } from '../models';
 import { getDatabase } from './database';
 
+/**
+ * Records the reserve movement the app applied when a month was closed. Rows
+ * are written only by the month-closing action; there is no manual transfer.
+ */
 export async function createReserveTransfer(
   monthKey: MonthKey,
   amountCents: number,
@@ -18,16 +22,11 @@ export async function createReserveTransfer(
   return result.lastInsertRowId;
 }
 
-export async function deleteReserveTransfer(id: number, db?: SQLiteDatabase): Promise<void> {
-  const database = db ?? (await getDatabase());
-  await database.runAsync('DELETE FROM reserve_transfers WHERE id = ?', [id]);
-}
-
 interface ReserveTransferRow {
   id: number;
   month_key: MonthKey;
   amount_cents: number;
-  direction: string;
+  direction: ReserveTransfer['direction'];
   note: string | null;
 }
 
@@ -36,29 +35,27 @@ function rowToTransfer(row: ReserveTransferRow): ReserveTransfer {
     id: row.id,
     monthKey: row.month_key,
     amountCents: row.amount_cents,
-    direction: row.direction === 'to-reserve' ? 'to-reserve' : 'to-month',
+    direction: row.direction,
     note: row.note,
   };
 }
 
-export async function getMonthTransfers(
-  monthKey: MonthKey,
+/**
+ * The reserve movements the app applied when closing months, newest first. This
+ * is the audit trail of every automatic adjustment ever made: one row per closed
+ * month, never a row the user typed.
+ */
+export async function getReserveTransfers(
+  limit = 60,
   db?: SQLiteDatabase
 ): Promise<ReserveTransfer[]> {
   const database = db ?? (await getDatabase());
   const rows = await database.getAllAsync<ReserveTransferRow>(
-    `SELECT id, month_key, amount_cents, direction, note FROM reserve_transfers
-     WHERE month_key = ? ORDER BY id ASC`,
-    [monthKey]
-  );
-  return rows.map(rowToTransfer);
-}
-
-export async function getAllTransfers(db?: SQLiteDatabase): Promise<ReserveTransfer[]> {
-  const database = db ?? (await getDatabase());
-  const rows = await database.getAllAsync<ReserveTransferRow>(
-    `SELECT id, month_key, amount_cents, direction, note FROM reserve_transfers
-     ORDER BY month_key ASC, id ASC`
+    `SELECT id, month_key, amount_cents, direction, note
+       FROM reserve_transfers
+      ORDER BY month_key DESC, id DESC
+      LIMIT ?`,
+    [limit]
   );
   return rows.map(rowToTransfer);
 }

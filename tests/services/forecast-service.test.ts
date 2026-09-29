@@ -52,6 +52,7 @@ function transaction(amountCents: number, budgetId: number | null = 1): Transact
     attachmentName: null,
     attachmentMime: null,
     attachment: null,
+    rating: null,
   };
 }
 

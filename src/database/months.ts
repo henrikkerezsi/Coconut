@@ -214,6 +214,39 @@ export async function materializeMonth(
   await materializeMonthSubscriptions(monthKey, database);
 }
 
+/**
+ * Makes sure the period the app is working on exists and is fully set up.
+ *
+ * Closing a month moves the app on to the next period, which may not exist yet,
+ * so this creates it with the allowance and with the reserve balance the
+ * previous month ended on.
+ */
+export async function ensureActiveMonth(
+  monthKey: MonthKey,
+  db?: SQLiteDatabase
+): Promise<Month> {
+  const database = db ?? (await getDatabase());
+  const existing = await getMonth(monthKey, database);
+  if (!existing) {
+    const settings = await getSettings(database);
+    const startingReserve = await computeStartingReserve(monthKey, database);
+    await insertMonth(
+      {
+        monthKey,
+        allowanceCents: settings.monthlyAllowanceCents,
+        startingReserveCents: startingReserve,
+      },
+      database
+    );
+  }
+  await materializeMonth(monthKey, database);
+  const month = await getMonth(monthKey, database);
+  if (!month) {
+    throw new Error(`Failed to create month ${monthKey}`);
+  }
+  return month;
+}
+
 export async function materializeMonthSubscriptions(
   monthKey: MonthKey,
   db?: SQLiteDatabase
@@ -251,23 +284,21 @@ export async function updateMonthStartingReserve(
   ]);
 }
 
+/**
+ * Closes a month permanently, storing the reserve balance it ended on. Returns
+ * false when the month was already closed, so the caller can avoid recording
+ * the closing adjustment twice.
+ */
 export async function closeMonth(
   monthKey: MonthKey,
   endingReserveCents: number,
   db?: SQLiteDatabase
-): Promise<void> {
+): Promise<boolean> {
   const database = db ?? (await getDatabase());
-  await database.runAsync(
+  const result = await database.runAsync(
     `UPDATE months SET ending_reserve_cents = ?, is_closed = 1, closed_at = datetime('now')
-     WHERE month_key = ?`,
+     WHERE month_key = ? AND is_closed = 0`,
     [endingReserveCents, monthKey]
   );
-}
-
-export async function reopenMonth(monthKey: MonthKey, db?: SQLiteDatabase): Promise<void> {
-  const database = db ?? (await getDatabase());
-  await database.runAsync(
-    'UPDATE months SET ending_reserve_cents = NULL, is_closed = 0, closed_at = NULL WHERE month_key = ?',
-    [monthKey]
-  );
+  return result.changes > 0;
 }

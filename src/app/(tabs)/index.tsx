@@ -5,7 +5,7 @@ import { Button, Card, FAB, List, Text, TouchableRipple } from 'react-native-pap
 import { useRouter } from 'expo-router';
 import { useAppData } from '../../data/DataProvider';
 import { formatCents, formatSignedCents } from '../../utils/currency';
-import { currentMonthKey, EVERGREEN_MONTH_KEY, monthLabel, monthProgress, relativeDayLabel } from '../../utils/date';
+import { EVERGREEN_MONTH_KEY, monthLabel, monthProgress, relativeDayLabel } from '../../utils/date';
 import { StatCard, type Tone } from '../../components/stat-card';
 import { reserveDrawBehindPlan } from '../../services/allowance-service';
 import { MonthProgressBar } from '../../components/month-progress-bar';
@@ -15,9 +15,20 @@ import { useAppTheme } from '../../theme';
 import { ScreenFade } from '../../components/screen-fade';
 import { FadeIn } from '../../components/fade-in';
 import { AnimatedNumber } from '../../components/animated-number';
+import { MonthClosingBanner } from '../../components/month-closing-banner';
+import { findClosableMonth } from '../../services/month-closing-service';
+import dayjs from 'dayjs';
 
 export default function OverviewScreen() {
-  const { ready, settings, recentTransactions, currentDashboard, currentMonth, allSubscriptions } = useAppData();
+  const {
+    ready,
+    settings,
+    recentTransactions,
+    currentDashboard,
+    currentMonth,
+    allMonths,
+    allSubscriptions,
+  } = useAppData();
   const theme = useAppTheme();
   const router = useRouter();
 
@@ -39,15 +50,23 @@ export default function OverviewScreen() {
   const plannedDraw = forecast.allowanceVsPlanCents;
   const actualDraw = forecast.remainingAllowanceCents;
   const behindPlan = reserveDrawBehindPlan(plannedDraw, actualDraw);
-  const transferNote =
-    reserveProjection.transferNetCents > 0
-      ? `${formatCents(reserveProjection.transferNetCents, symbol)} moved to the reserve`
-      : `${formatCents(-reserveProjection.transferNetCents, symbol)} moved to the month`;
+  const closableMonth = findClosableMonth(allMonths, dayjs());
 
   return (
     <ScreenFade>
       <View style={styles.screen}>
         <KeyboardAwareScrollView contentContainerStyle={styles.container}>
+      {closableMonth ? (
+        <MonthClosingBanner
+          monthKey={closableMonth.monthKey}
+          onPress={() =>
+            router.push({
+              pathname: '/planning/close-month',
+              params: { monthKey: closableMonth.monthKey },
+            })
+          }
+        />
+      ) : null}
       <View style={styles.brandRow}>
         <CoconutLogo size={28} />
         <Text
@@ -58,7 +77,7 @@ export default function OverviewScreen() {
         </Text>
       </View>
       <Text variant="titleLarge" style={styles.monthTitle}>
-        {monthLabel(currentMonthKey())}
+        {monthLabel(currentMonth.monthKey)}
       </Text>
 
       <Card mode="contained" style={styles.reserveCard} contentStyle={styles.cardContent}>
@@ -86,15 +105,10 @@ export default function OverviewScreen() {
           <View style={styles.reserveRow}>
             <Text variant="bodyMedium">{reserved ? 'Month closed' : 'Projected month end'}</Text>
             <AnimatedNumber
-              value={reserveProjection.endingReserveBeforeTransfersCents}
+              value={reserveProjection.endingReserveCents}
               format={(v) => formatCents(v, symbol)}
             />
           </View>
-          {reserveProjection.transferNetCents !== 0 ? (
-            <Text variant="labelSmall" style={styles.reserveNote}>
-              {`Projected without manual transfers: ${transferNote}`}
-            </Text>
-          ) : null}
         </Card.Content>
       </Card>
 
@@ -358,10 +372,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 3,
-  },
-  reserveNote: {
-    opacity: 0.6,
-    marginTop: 6,
   },
   statRow: {
     flexDirection: 'row',

@@ -534,4 +534,16 @@ SELECT m.month_key, s.id, s.name, s.monthly_amount_cents
    AND m.month_key <= s.end_month;
 `,
   },
+  {
+    id: 14,
+    description: 'Per-transaction value rating',
+    // How much value a purchase turned out to be, chosen by the user while
+    // reviewing a month before closing it. Nullable: no rating means the user
+    // never judged the purchase, which counts as neutral. Synced with the
+    // transactions table, which already carries uuid/updated_at and triggers.
+    sql: `
+ALTER TABLE transactions ADD COLUMN rating TEXT
+  CHECK (rating IS NULL OR rating IN ('regret', 'neutral', 'good'));
+`,
+  },
 ];

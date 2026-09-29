@@ -21,6 +21,7 @@ function transaction(budgetId: number | null, amountCents: number, date = '2026-
     attachmentName: null,
     attachmentMime: null,
     attachment: null,
+    rating: null,
   };
 }
 

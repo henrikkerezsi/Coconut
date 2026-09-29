@@ -1,35 +1,9 @@
-import type { ReserveTransfer } from '../../src/models';
 import {
+  AUTOMATIC_TRANSFER_NOTE,
+  buildAutomaticReserveTransfer,
   effectiveEndingReserve,
   projectReserve,
-  sumTransfers,
 } from '../../src/services/reserve-service';
-
-function transfer(
-  direction: ReserveTransfer['direction'],
-  amountCents: number
-): ReserveTransfer {
-  return {
-    id: 1,
-    monthKey: '2026-09',
-    direction,
-    amountCents,
-    note: null,
-  };
-}
-
-describe('sumTransfers', () => {
-  it('returns zero totals for no transfers', () => {
-    expect(sumTransfers([])).toEqual({ toMonthCents: 0, toReserveCents: 0, netCents: 0 });
-  });
-
-  it('totals money moved into the month separately from money moved into the reserve', () => {
-    const result = sumTransfers([transfer('to-month', 20000), transfer('to-reserve', 5000)]);
-    expect(result.toMonthCents).toBe(20000);
-    expect(result.toReserveCents).toBe(5000);
-    expect(result.netCents).toBe(-15000);
-  });
-});
 
 describe('projectReserve', () => {
   it('draws from the reserve when spending exceeds the allowance', () => {
@@ -37,7 +11,6 @@ describe('projectReserve', () => {
       startingReserveCents: 100000,
       actualSpendingCents: 60000,
       allowanceCents: 50000,
-      transfers: [],
     });
     expect(result.endingReserveCents).toBe(90000);
     expect(result.adjustmentCents).toBe(-10000);
@@ -49,42 +22,9 @@ describe('projectReserve', () => {
       startingReserveCents: 100000,
       actualSpendingCents: 40000,
       allowanceCents: 50000,
-      transfers: [],
     });
     expect(result.endingReserveCents).toBe(110000);
     expect(result.adjustmentCents).toBe(10000);
-  });
-
-  it('applies transfers on top of the monthly adjustment', () => {
-    const result = projectReserve({
-      startingReserveCents: 100000,
-      actualSpendingCents: 60000,
-      allowanceCents: 50000,
-      transfers: [transfer('to-month', 20000), transfer('to-reserve', 10000)],
-    });
-    expect(result.endingReserveCents).toBe(80000);
-  });
-
-  it('projects the reserve without transfers for the overview card', () => {
-    const result = projectReserve({
-      startingReserveCents: 100000,
-      actualSpendingCents: 60000,
-      allowanceCents: 50000,
-      incomeCents: 5000,
-      transfers: [transfer('to-month', 20000), transfer('to-reserve', 10000)],
-    });
-    expect(result.endingReserveBeforeTransfersCents).toBe(100000 + (55000 - 60000));
-    expect(result.endingReserveBeforeTransfersCents).not.toBe(result.endingReserveCents);
-  });
-
-  it('projects the same figure with and without transfers when none exist', () => {
-    const result = projectReserve({
-      startingReserveCents: 100000,
-      actualSpendingCents: 40000,
-      allowanceCents: 50000,
-      transfers: [],
-    });
-    expect(result.endingReserveBeforeTransfersCents).toBe(result.endingReserveCents);
   });
 
   it('keeps the reserve unchanged when spending equals the allowance', () => {
@@ -92,7 +32,6 @@ describe('projectReserve', () => {
       startingReserveCents: 100000,
       actualSpendingCents: 50000,
       allowanceCents: 50000,
-      transfers: [],
     });
     expect(result.endingReserveCents).toBe(100000);
   });
@@ -103,7 +42,6 @@ describe('projectReserve', () => {
       actualSpendingCents: 60000,
       allowanceCents: 50000,
       incomeCents: 10000,
-      transfers: [],
     });
     expect(result.adjustmentCents).toBe(0);
     expect(result.overspent).toBe(false);
@@ -116,10 +54,51 @@ describe('projectReserve', () => {
       actualSpendingCents: 40000,
       allowanceCents: 50000,
       incomeCents: 15000,
-      transfers: [],
     });
     expect(result.adjustmentCents).toBe(25000);
     expect(result.endingReserveCents).toBe(125000);
+  });
+});
+
+describe('buildAutomaticReserveTransfer', () => {
+  it('records unspent money as a move into the reserve', () => {
+    expect(buildAutomaticReserveTransfer(25000)).toEqual({
+      amountCents: 25000,
+      direction: 'to-reserve',
+      note: AUTOMATIC_TRANSFER_NOTE,
+    });
+  });
+
+  it('records overspending as a draw from the reserve into the month', () => {
+    expect(buildAutomaticReserveTransfer(-10000)).toEqual({
+      amountCents: 10000,
+      direction: 'to-month',
+      note: AUTOMATIC_TRANSFER_NOTE,
+    });
+  });
+
+  it('records a zero adjustment as no movement in either direction', () => {
+    const result = buildAutomaticReserveTransfer(0);
+    expect(result.amountCents).toBe(0);
+    expect(result.direction).toBe('to-reserve');
+  });
+
+  it('always records the amount as a positive magnitude', () => {
+    expect(buildAutomaticReserveTransfer(-10000).amountCents).toBe(10000);
+    expect(buildAutomaticReserveTransfer(10000).amountCents).toBe(10000);
+  });
+
+  it('agrees with the adjustment the projection reports', () => {
+    const projection = projectReserve({
+      startingReserveCents: 100000,
+      actualSpendingCents: 60000,
+      allowanceCents: 50000,
+    });
+    const transfer = buildAutomaticReserveTransfer(projection.adjustmentCents);
+    expect(projection.startingReserveCents - projection.endingReserveCents).toBe(
+      transfer.amountCents
+    );
+    expect(transfer.direction).toBe('to-month');
   });
 });
 

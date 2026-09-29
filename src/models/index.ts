@@ -71,6 +71,15 @@ export interface MonthBudget {
   plannedAmountCents: number;
 }
 
+/**
+ * How much value a purchase turned out to be, set when the user reviews a month
+ * before closing it. A missing rating means the user never judged the purchase
+ * and counts as neutral, so the month can always be closed.
+ */
+export const TRANSACTION_RATINGS = ['regret', 'neutral', 'good'] as const;
+
+export type TransactionRating = (typeof TRANSACTION_RATINGS)[number];
+
 export interface Transaction {
   id: number;
   monthKey: MonthKey;
@@ -84,6 +93,7 @@ export interface Transaction {
   attachment: Uint8Array | null;
   originType?: string | null;
   originId?: string | null;
+  rating: TransactionRating | null;
 }
 
 export interface Income {

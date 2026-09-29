@@ -119,6 +119,7 @@ const REMOTE_COLUMNS: Record<string, string[]> = {
     'note',
     'origin_type',
     'origin_id',
+    'rating',
     'updated_at',
   ],
   settings: ['key', 'value', 'user_id', 'updated_at'],

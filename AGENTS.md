@@ -205,6 +205,38 @@ where a `.web` variant is the cleaner solution.
 
 ---
 
+## 11.1 The Android Emulator Is Off Limits — NEVER Wipe It
+
+**NEVER, EVER, UNDER ANY CIRCUMSTANCES wipe, reset, erase, or recreate the Android
+emulator or any of its data. This is absolute and non-negotiable.**
+
+The user's emulator holds real, hand-entered test data (months, budgets, transactions,
+fixed expenses, subscriptions, shared spaces, and personal financial history) that
+exists nowhere else. It is irreplaceable. Treat every emulator wipe as data loss for
+the user.
+
+Never run, suggest, recommend, or fall back to any of the following:
+
+- `adb emu kill` (kills the emulator process)
+- `adb emu avd name` / any AVD deletion
+- `emulator -avd <name> -wipe-data` (the `-wipe-data` flag)
+- `adb shell pm clear com.coconut.app` (clears app data)
+- `adb uninstall com.coconut.app`
+- Deleting or re-creating the AVD via Android Studio / Device Manager
+- Any "reset emulator", "cold boot", or "wipe app data" button in an IDE or GUI
+- Deleting the emulator's userdata directory from disk
+- Any other command or action whose effect is to erase emulator or app data
+
+Allowed, and preferred, for verification: read-only inspection
+(`adb shell dumpsys`, `adb logcat`, `adb shell run-as ... ls`), rebuilding and
+reinstalling the APK (`npx expo run:android`), and `adb shell am force-stop` to
+restart the app process. None of these erase data.
+
+If a task seems to require a fresh emulator, STOP and ask the user first. Never
+assume permission, and never treat a wipe as an acceptable debugging step.
+
+---
+
 ## 12. Definition of Done
 
 A task is done only when ALL of the following hold:

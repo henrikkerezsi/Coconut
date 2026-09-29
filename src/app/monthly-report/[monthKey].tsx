@@ -77,12 +77,6 @@ export default function MonthlyReportScreen() {
   const symbol = settings.currencySymbol;
   const saved = report.adjustmentCents > 0;
   const drawn = report.adjustmentCents < 0;
-  const transferNote =
-    report.transferNetCents !== 0
-      ? report.transferNetCents > 0
-        ? ` +${formatCents(report.transferNetCents, symbol)} transferred to reserve`
-        : ` ${formatCents(-report.transferNetCents, symbol)} transferred to the month`
-      : null;
 
   return (
     <KeyboardAwareScrollView contentContainerStyle={styles.container}>
@@ -206,9 +200,6 @@ export default function MonthlyReportScreen() {
             value={formatSignedCents(report.adjustmentCents, symbol)}
             tone={saved && report.adjustmentCents !== 0 ? 'good' : drawn ? 'bad' : undefined}
           />
-          {transferNote ? (
-            <ReportRow label="Transfers" value={transferNote.trim()} />
-          ) : null}
           <ReportRow
             label="Ending reserve"
             value={

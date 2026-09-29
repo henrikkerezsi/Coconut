@@ -48,3 +48,6 @@ supabase/.temp/
 # generated native folders
 /ios
 /android
+
+# demo seed manifest (local emulator tooling)
+.demo-manifest.json

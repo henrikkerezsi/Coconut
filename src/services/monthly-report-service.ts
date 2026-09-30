@@ -6,6 +6,7 @@ import type {
   MonthBudget,
   MonthFixedExpense,
   MonthKey,
+  MonthPlanEvent,
   MonthSubscription,
   Transaction,
 } from '../models';
@@ -27,6 +28,12 @@ export interface MonthlyReportSubscription {
 
 export interface MonthlyReportBudget {
   name: string;
+  /**
+   * The amount the budget was planned at when the month started, or null when the
+   * month has no plan record and so no known starting point.
+   */
+  startingCents: number | null;
+  /** The amount the user ended up adjusting the budget to before closing. */
   plannedCents: number;
   spentCents: number;
   remainingCents: number;
@@ -41,6 +48,8 @@ export interface MonthlyReportInput {
   subscriptions: MonthSubscription[];
   fixedExpenseDefinitions: Record<number, FixedExpense>;
   budgetDefinitions: Record<number, Budget>;
+  /** The month's plan record, which is what knows how the plan was arrived at. */
+  planEvents: MonthPlanEvent[];
 }
 
 export interface MonthlyReport {
@@ -57,6 +66,55 @@ export interface MonthlyReport {
   startingReserveCents: number;
   adjustmentCents: number;
   endingReserveCents: number | null;
+  /** The planned draw as first recorded, or null when the month has no record of one. */
+  initialDrawCents: number | null;
+  /** The draw the month was left planning, or null when none was ever planned. */
+  endingDrawCents: number | null;
+}
+
+/** What a month's plan record says about how its plan was arrived at. */
+export interface MonthPlanSummary {
+  /** The opening amount of each budget, for the budgets the record opens. */
+  startingByBudget: Map<number, number>;
+  initialDrawCents: number | null;
+  endingDrawCents: number | null;
+}
+
+/**
+ * Folds a month's plan record into the two things a closing report needs: where
+ * each budget started, and the draw as planned at each end of the month.
+ *
+ * The record opens with one `initial` event per budget, holding the amount the
+ * month started at, and a budget's later amounts are each a `budget` event. The
+ * month ends at the last of them, which is the amount the user left it at. A
+ * budget with no `initial` event has no known starting point, so it is absent
+ * from the map rather than guessed at.
+ *
+ * The draw is a single month-wide plan, not a per-budget one. Its first recorded
+ * event is the opening draw and its last is the ending one; a month that planned
+ * no draw and then raised one has no opening event, so its first recorded draw
+ * is where the record begins rather than a value the month started at.
+ */
+export function summarizeMonthPlan(events: MonthPlanEvent[]): MonthPlanSummary {
+  const startingByBudget = new Map<number, number>();
+  let initialDrawCents: number | null = null;
+  let endingDrawCents: number | null = null;
+
+  for (const event of events) {
+    if (
+      event.kind === 'initial' &&
+      event.budgetId !== null &&
+      !startingByBudget.has(event.budgetId)
+    ) {
+      startingByBudget.set(event.budgetId, event.newAmountCents);
+    }
+    if (event.kind === 'draw') {
+      initialDrawCents ??= event.newAmountCents;
+      endingDrawCents = event.newAmountCents;
+    }
+  }
+
+  return { startingByBudget, initialDrawCents, endingDrawCents };
 }
 
 /** Fixed-expense instances with their name and the amount actually charged. */
@@ -89,7 +147,8 @@ export function reportSubscriptions(
 export function reportBudgets(
   monthBudgets: MonthBudget[],
   definitions: Record<number, Budget>,
-  transactions: Transaction[]
+  transactions: Transaction[],
+  plan: MonthPlanSummary = { startingByBudget: new Map(), initialDrawCents: null, endingDrawCents: null }
 ): MonthlyReportBudget[] {
   const spentByBudget = spendingByCategory(transactions);
   const entries = monthBudgets.map((monthBudget) => {
@@ -100,6 +159,7 @@ export function reportBudgets(
     );
     return {
       name: definition?.name ?? `Budget #${monthBudget.budgetId}`,
+      startingCents: plan.startingByBudget.get(monthBudget.budgetId) ?? null,
       plannedCents: status.plannedCents,
       spentCents: status.spentCents,
       remainingCents: status.remainingCents,
@@ -113,6 +173,7 @@ export function reportBudgets(
   if (uncategorizedCents > 0) {
     entries.push({
       name: 'No budget',
+      startingCents: null,
       plannedCents: 0,
       spentCents: uncategorizedCents,
       remainingCents: -uncategorizedCents,
@@ -127,9 +188,10 @@ export function reportBudgets(
  * closed (immutable) months.
  */
 export function buildMonthlyReport(input: MonthlyReportInput): MonthlyReport {
+  const plan = summarizeMonthPlan(input.planEvents);
   const fixedExpenses = reportFixedExpenses(input.fixedExpenses, input.fixedExpenseDefinitions);
   const subscriptions = reportSubscriptions(input.subscriptions);
-  const budgets = reportBudgets(input.budgets, input.budgetDefinitions, input.transactions);
+  const budgets = reportBudgets(input.budgets, input.budgetDefinitions, input.transactions, plan);
   const fixedTotalCents = fixedExpenses.reduce((sum, expense) => sum + expense.chargedCents, 0);
   const subscriptionTotalCents = subscriptions.reduce(
     (sum, subscription) => sum + subscription.monthlyCents,
@@ -159,5 +221,7 @@ export function buildMonthlyReport(input: MonthlyReportInput): MonthlyReport {
     startingReserveCents: input.month.startingReserveCents,
     adjustmentCents,
     endingReserveCents: input.month.endingReserveCents,
+    initialDrawCents: plan.initialDrawCents,
+    endingDrawCents: plan.endingDrawCents,
   };
 }

@@ -19,6 +19,15 @@ export const tutorialPages: TutorialPage[] = [
       'savings reserve; what you overspend is covered by it. The Overview shows this at a glance.',
   },
   {
+    icon: 'calendar-plus-outline',
+    title: 'Starting a Month',
+    body: 'A month only comes into existence because you start it — the app never creates one ' +
+      'on its own. One screen asks what the coming month looks like: your allowance, the fixed ' +
+      'expenses and subscriptions already committed, an amount for each budget, and optionally ' +
+      'how much you mean to draw from your savings reserve. The plan is checked against what the ' +
+      'month can afford, so you can never plan away money that is not there.',
+  },
+  {
     icon: 'cash-multiple',
     title: 'Transactions',
     body: 'Record spending in seconds: pick a date, enter the amount, choose a budget and add a ' +
@@ -36,6 +45,16 @@ export const tutorialPages: TutorialPage[] = [
     body: 'Add recurring bills like rent or insurance and they are planned automatically every ' +
       'month. Variable bills can be estimated from previous months and corrected to the real ' +
       'amount once you know it.',
+  },
+  {
+    icon: 'file-document-outline',
+    title: 'Closing a Month',
+    body: 'Closing the month is the final action. It becomes available shortly before the month ' +
+      'ends, asks you to confirm, and warns that it cannot be undone; should you miss the window, ' +
+      'the app settles the month for you. Closing records the reserve movement and opens the ' +
+      'month\u2019s report: what you spent against fixed expenses, subscriptions and each budget, ' +
+      'what every budget started at and what you adjusted it to before closing, the draw as you ' +
+      'planned it, and what your savings reserve ended on. Reports are read-only from then on.',
   },
   {
     icon: 'chart-line',
@@ -62,7 +81,8 @@ export const tutorialPages: TutorialPage[] = [
   {
     icon: 'rocket-launch-outline',
     title: 'Ready to start?',
-    body: 'Set your monthly allowance, plan fixed expenses, create a few budgets, then add your ' +
-      'first transaction. You can replay this tour any time from Settings.',
+    body: 'Start your first month: set the allowance, bring in your fixed expenses and give each ' +
+      'budget a number. Then add your first transaction. When the month is done, close it and read ' +
+      'the report. You can replay this tour any time from Settings.',
   },
 ];

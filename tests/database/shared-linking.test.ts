@@ -2,13 +2,19 @@
 
 import { DatabaseSync } from 'node:sqlite';
 import { MIGRATIONS } from '../../src/database/migrations';
-import { decoupleSharedTransactions, reconcileSharedTransactions } from '../../src/database/sharedLinking';
+import {
+  decoupleSharedTransactions,
+  reconcileSharedTransactions,
+  reconcileSharedTransactionsForLocalUser,
+} from '../../src/database/sharedLinking';
+import { createPlannedMonth } from '../../src/database/months';
 import { getTransaction, updateTransactionAttachment, updateTransactionBudget } from '../../src/database/transactions';
 
 interface TestDb {
   getFirstAsync<T>(sql: string, params?: unknown[]): Promise<T | null>;
   getAllAsync<T>(sql: string, params?: unknown[]): Promise<T[]>;
   runAsync(sql: string, params?: unknown[]): Promise<unknown>;
+  withTransactionAsync<T>(task: () => Promise<T>): Promise<T>;
 }
 
 type SqlParams = Parameters<ReturnType<DatabaseSync['prepare']>['get']>;
@@ -30,6 +36,17 @@ function makeDbApi(raw: DatabaseSync): TestDb {
         changes: Number(result.changes),
       });
     },
+    async withTransactionAsync<T>(task: () => Promise<T>): Promise<T> {
+      raw.exec('BEGIN');
+      try {
+        const result = await task();
+        raw.exec('COMMIT');
+        return result;
+      } catch (error) {
+        raw.exec('ROLLBACK');
+        throw error;
+      }
+    },
   };
 }
 
@@ -46,6 +63,15 @@ interface Fixture {
   periodId: number;
   memberOne: number;
   memberTwo: number;
+}
+
+const MONTH_KEY = '2026-09';
+
+function seedMonth(db: DatabaseSync, monthKey = MONTH_KEY, closed = false): void {
+  db.exec(
+    `INSERT INTO months (month_key, allowance_cents, starting_reserve_cents, is_closed)
+     VALUES ('${monthKey}', 100000, 0, ${closed ? 1 : 0})`
+  );
 }
 
 function seedSpace(db: DatabaseSync): Fixture {
@@ -128,9 +154,37 @@ function linkedTransactions(db: DatabaseSync): Array<{
 }
 
 describe('reconcileSharedTransactions', () => {
+  it('rewrites nothing when the mirror already matches the expense', async () => {
+    const raw = freshDb();
+    const fixture = seedSpace(raw);
+    seedMonth(raw);
+    addExpense(raw, fixture, 10000, 4000, 6000);
+    const db = makeDbApi(raw) as never;
+
+    await reconcileSharedTransactions('user-1', db);
+    const firstUpdatedAt = (
+      raw.prepare('SELECT updated_at FROM transactions').get() as { updated_at: string }
+    ).updated_at;
+    raw.exec(`DELETE FROM sync_outbox`);
+
+    // Reconciling again must be a no-op. An identical UPDATE would restamp
+    // `updated_at` and re-queue the row, so every sync would re-push mirrors
+    // that had not actually changed.
+    await reconcileSharedTransactions('user-1', db);
+
+    expect(
+      (raw.prepare('SELECT updated_at FROM transactions').get() as { updated_at: string })
+        .updated_at
+    ).toBe(firstUpdatedAt);
+    expect(
+      (raw.prepare('SELECT COUNT(*) AS n FROM sync_outbox').get() as { n: number }).n
+    ).toBe(0);
+  });
+
   it('creates one linked transaction for the signed-in member share', async () => {
     const raw = freshDb();
     const fixture = seedSpace(raw);
+    seedMonth(raw);
     const { uuid } = addExpense(raw, fixture, 10000, 4000, 6000);
 
     await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
@@ -146,6 +200,7 @@ describe('reconcileSharedTransactions', () => {
   it('re-derives the linked amount when the split changes', async () => {
     const raw = freshDb();
     const fixture = seedSpace(raw);
+    seedMonth(raw);
     const { expenseId } = addExpense(raw, fixture, 10000, 4000, 6000);
     await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
 
@@ -163,6 +218,7 @@ describe('reconcileSharedTransactions', () => {
   it('removes linked transactions when the expense is deleted', async () => {
     const raw = freshDb();
     const fixture = seedSpace(raw);
+    seedMonth(raw);
     const { expenseId } = addExpense(raw, fixture, 10000, 4000, 6000);
     await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
 
@@ -176,6 +232,7 @@ describe('reconcileSharedTransactions', () => {
   it('ignores expenses for spaces the user only has a pending invite to', async () => {
     const raw = freshDb();
     const fixture = seedSpace(raw);
+    seedMonth(raw);
     raw.exec(
       `UPDATE shared_space_members SET status = 'pending', user_id = NULL
         WHERE id = ${fixture.memberOne}`
@@ -194,6 +251,7 @@ describe('reconcileSharedTransactions with local attachments', () => {
   it('keeps a locally-attached file when the linked transaction is re-derived', async () => {
     const raw = freshDb();
     const fixture = seedSpace(raw);
+    seedMonth(raw);
     const { uuid } = addExpense(raw, fixture, 10000, 4000, 6000);
     await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
 
@@ -216,6 +274,7 @@ describe('reconcileSharedTransactions with local attachments', () => {
   it('re-derives the amount while preserving the local attachment', async () => {
     const raw = freshDb();
     const fixture = seedSpace(raw);
+    seedMonth(raw);
     const { expenseId } = addExpense(raw, fixture, 10000, 4000, 6000);
     await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
 
@@ -241,6 +300,7 @@ describe('reconcileSharedTransactions with local attachments', () => {
   it('updating the attachment to null clears it on the linked transaction', async () => {
     const raw = freshDb();
     const fixture = seedSpace(raw);
+    seedMonth(raw);
     const { uuid } = addExpense(raw, fixture, 10000, 4000, 6000);
     await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
 
@@ -263,6 +323,7 @@ describe('decoupleSharedTransactions', () => {
   it('clears the link but keeps the personal transaction', async () => {
     const raw = freshDb();
     const fixture = seedSpace(raw);
+    seedMonth(raw);
     const { uuid } = addExpense(raw, fixture, 10000, 4000, 6000);
     await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
     expect(linkedTransactions(raw)).toHaveLength(1);
@@ -310,6 +371,7 @@ describe('mirror budget assignment', () => {
   it('assigns the budget of the newest same-name transaction on first mirror', async () => {
     const raw = freshDb();
     const fixture = seedSpace(raw);
+    seedMonth(raw);
     const olderBudget = seedBudget(raw, 'Eating out');
     const newestBudget = seedBudget(raw, 'Groceries');
     addPersonalTransaction(raw, 'Dinner', olderBudget, '2026-09-01');
@@ -326,6 +388,7 @@ describe('mirror budget assignment', () => {
   it('leaves the mirror without a budget when no same-name transaction exists', async () => {
     const raw = freshDb();
     const fixture = seedSpace(raw);
+    seedMonth(raw);
     addExpense(raw, fixture, 10000, 4000, 6000);
 
     await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
@@ -338,6 +401,7 @@ describe('mirror budget assignment', () => {
   it('does not re-run the budget lookup when the mirror is re-derived', async () => {
     const raw = freshDb();
     const fixture = seedSpace(raw);
+    seedMonth(raw);
     const initialBudget = seedBudget(raw, 'Groceries');
     const changedBudget = seedBudget(raw, 'Eating out');
     addPersonalTransaction(raw, 'Dinner', initialBudget, '2026-09-20');
@@ -362,6 +426,7 @@ describe('mirror budget assignment', () => {
   it('preserves a manually-chosen budget across re-derives', async () => {
     const raw = freshDb();
     const fixture = seedSpace(raw);
+    seedMonth(raw);
     const chosen = seedBudget(raw, 'Groceries');
     const { expenseId } = addExpense(raw, fixture, 10000, 4000, 6000);
     await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
@@ -380,5 +445,138 @@ describe('mirror budget assignment', () => {
     expect(rederived).toHaveLength(1);
     expect(rederived[0].amount_cents).toBe(2500);
     expect(rederived[0].budget_id).toBe(chosen);
+  });
+});
+
+describe('mirroring into a month the user has not started', () => {
+  function mirrorRows(db: DatabaseSync): Array<{ month_key: string; date: string; amount_cents: number }> {
+    return db
+      .prepare(`SELECT month_key, date, amount_cents FROM transactions ORDER BY id ASC`)
+      .all() as Array<{ month_key: string; date: string; amount_cents: number }>;
+  }
+
+  function monthRows(db: DatabaseSync): string[] {
+    return (db.prepare('SELECT month_key FROM months ORDER BY month_key ASC').all() as Array<{
+      month_key: string;
+    }>).map((row) => row.month_key);
+  }
+
+  it('creates no month for an expense the user has not started', async () => {
+    const raw = freshDb();
+    const fixture = seedSpace(raw);
+    addExpense(raw, fixture, 10000, 4000, 6000);
+
+    await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
+
+    // A fabricated month would be the oldest open one and so would take over as
+    // the active month, leaving the user in a period they never planned.
+    expect(monthRows(raw)).toEqual([]);
+    expect(linkedTransactions(raw)).toHaveLength(0);
+  });
+
+  it('leaves the shared expense and split in place while the month is unstarted', async () => {
+    const raw = freshDb();
+    const fixture = seedSpace(raw);
+    addExpense(raw, fixture, 10000, 4000, 6000);
+
+    await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
+
+    expect(
+      (raw.prepare('SELECT COUNT(*) AS n FROM shared_expenses').get() as { n: number }).n
+    ).toBe(1);
+    expect(
+      (raw.prepare('SELECT COUNT(*) AS n FROM shared_expense_splits').get() as { n: number }).n
+    ).toBe(2);
+  });
+
+  it('records the amount once the user plans the month', async () => {
+    const raw = freshDb();
+    const fixture = seedSpace(raw);
+    addExpense(raw, fixture, 10000, 4000, 6000);
+
+    await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
+    expect(linkedTransactions(raw)).toHaveLength(0);
+
+    // The path the planning screen takes, followed by the flush it triggers.
+    await createPlannedMonth(
+      { monthKey: MONTH_KEY, budgetPlans: {}, drawCents: 0 },
+      makeDbApi(raw) as never
+    );
+    await reconcileSharedTransactionsForLocalUser(makeDbApi(raw) as never);
+
+    const mirrors = mirrorRows(raw);
+    expect(mirrors).toHaveLength(1);
+    expect(mirrors[0].month_key).toBe(MONTH_KEY);
+    expect(mirrors[0].date).toBe('2026-09-10');
+    expect(mirrors[0].amount_cents).toBe(4000);
+  });
+
+  it('moves the amount into the next open month when its own is closed', async () => {
+    const raw = freshDb();
+    const fixture = seedSpace(raw);
+    seedMonth(raw, '2026-08', true);
+    seedMonth(raw, MONTH_KEY, true);
+    seedMonth(raw, '2026-10');
+    addExpense(raw, fixture, 10000, 4000, 6000);
+
+    await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
+
+    const mirrors = mirrorRows(raw);
+    expect(mirrors).toHaveLength(1);
+    expect(mirrors[0].month_key).toBe('2026-10');
+    expect(mirrors[0].date).toBe('2026-10-01');
+  });
+
+  it('leaves a mirror in its month when that month is closed afterwards', async () => {
+    const raw = freshDb();
+    const fixture = seedSpace(raw);
+    seedMonth(raw);
+    addExpense(raw, fixture, 10000, 4000, 6000);
+    await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
+    expect(mirrorRows(raw)[0].date).toBe('2026-09-10');
+
+    // September is settled and October opened. The amount was part of September's
+    // spending, so it must not be rewritten into October.
+    raw.exec(
+      `UPDATE months SET is_closed = 1, ending_reserve_cents = 0 WHERE month_key = '${MONTH_KEY}'`
+    );
+    seedMonth(raw, '2026-10');
+    await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
+
+    const mirrors = mirrorRows(raw);
+    expect(mirrors).toHaveLength(1);
+    expect(mirrors[0].month_key).toBe(MONTH_KEY);
+    expect(mirrors[0].date).toBe('2026-09-10');
+  });
+
+  it('brings a mirror back when a pull applied another month to it', async () => {
+    const raw = freshDb();
+    const fixture = seedSpace(raw);
+    seedMonth(raw);
+    addExpense(raw, fixture, 10000, 4000, 6000);
+    await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
+    expect(mirrorRows(raw)[0].month_key).toBe(MONTH_KEY);
+
+    // September is settled and the user has moved on to October.
+    raw.exec(
+      `UPDATE months SET is_closed = 1, ending_reserve_cents = 0 WHERE month_key = '${MONTH_KEY}'`
+    );
+    seedMonth(raw, '2026-10');
+
+    // `transactions.month_key` is a synced column, so a pull can move a mirror
+    // into whatever month the other device placed it in. Reproduce that, then
+    // reconcile the way `syncNow` does after its personal pull.
+    raw.exec(
+      `UPDATE transactions SET month_key = '2026-10', date = '2026-10-01'
+       WHERE origin_type = 'shared'`
+    );
+    expect(mirrorRows(raw)[0].month_key).toBe('2026-10');
+
+    await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
+
+    const mirrors = mirrorRows(raw);
+    expect(mirrors).toHaveLength(1);
+    expect(mirrors[0].month_key).toBe(MONTH_KEY);
+    expect(mirrors[0].date).toBe('2026-09-10');
   });
 });

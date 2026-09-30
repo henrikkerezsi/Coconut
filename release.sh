@@ -102,8 +102,10 @@ if [[ ! -f "$APK" ]]; then
   echo "Build finished but the APK was not found at $APK." >&2
   exit 1
 fi
-APK_SIZE="$(du -h "$APK" | cut -f1)"
-echo "APK ready: $APK ($APK_SIZE)"
+APK_RENAMED="android/app/build/outputs/apk/release/coconut.apk"
+mv APK APK_RENAMED
+APK_SIZE="$(du -h "$APK_RENAMED" | cut -f1)"
+echo "APK ready: $APK_RENAMED ($APK_SIZE)"
 
 REMOTE="$(git config --get remote.origin.url || true)"
 if [[ -n "$REMOTE" ]]; then

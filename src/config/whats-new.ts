@@ -7,6 +7,38 @@ export interface WhatsNewEntry {
 
 export const whatsNew: WhatsNewEntry[] = [
   {
+    version: '1.1.0',
+    releasedAt: '2026-09-30T00:00:00.000Z',
+    intro:
+      'Every month now has a beginning and an end, and both of them are yours. You start the month ' +
+      'by planning it, you look back over it and judge what you actually spent, and closing it ' +
+      'hands you a report that says how the plan and the reality really compared. A month is no ' +
+      'longer something that quietly passes by \u2014 it is something you plan, review and settle.',
+    features: [
+      'Starting a month is a single, deliberate screen: set the allowance, see the fixed expenses ' +
+        'and subscriptions already committed, plan an amount for every budget, and say how much you ' +
+        'mean to draw from your savings reserve',
+      'The plan is checked against what the month can actually afford, so you can never plan away ' +
+        'money that is not there \u2014 and a draw from the reserve can never be more than the ' +
+        'reserve holds',
+      'Coconut never invents a month: the app waits for you, and a month only ever comes into ' +
+        'existence because you started it',
+      'Change your mind as often as you like \u2014 every adjustment to a budget or to the draw is ' +
+        'recorded as a decision, so later you can see exactly how the plan was arrived at',
+      'Closing a month is a proper review: fixed expenses, subscriptions and every budget side by ' +
+        'side, ending in a confirmation that says plainly that closing is final and cannot be undone',
+      '"How useful was your spending?" \u2014 look back over the month and mark each purchase a regret, ' +
+        'neutral or good. Anything you never got around to counts as neutral, so a month can always ' +
+        'be closed',
+      'Closing opens near the end of the month, and if that window passes Coconut settles the month ' +
+        'for you \u2014 so a month is never left hanging open',
+      'The month-end report is fuller: every budget now shows what it started at and what you ' +
+        'adjusted it to before closing, so a re-planned budget finally explains itself',
+      'The reserve draw is part of the report too \u2014 the draw you planned with and the draw you ' +
+        'finished the month with, kept clearly apart from the money that actually moved at month end',
+    ],
+  },
+  {
     version: '1.0.3',
     releasedAt: '2026-09-25T00:00:00.000Z',
     intro:

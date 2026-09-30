@@ -238,6 +238,14 @@ function count(db: DatabaseSync, table: string): number {
   return (db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
 }
 
+/** A mirror can only be recorded in a month the user has, so open September. */
+function seedSeptember(raw: DatabaseSync): void {
+  raw.exec(
+    `INSERT INTO months (month_key, allowance_cents, starting_reserve_cents)
+     VALUES ('2026-09', 100000, 0)`
+  );
+}
+
 function seedSharedSpace(raw: DatabaseSync): {
   spaceId: number;
   periodId: number;
@@ -675,6 +683,7 @@ describe('pullSharedChanges', () => {
     // then pulls, then reconciles its linked transactions.
     await pushSharedChanges(client as never, api, 'user-2');
     await pullSharedChanges(client as never, api);
+    seedSeptember(raw);
     await reconcileSharedTransactions('user-2', api);
 
     const linked = raw
@@ -744,6 +753,7 @@ describe('pullSharedChanges', () => {
     const client = new FakeClient();
     seedRemote(client);
     await pullSharedChanges(client as never, makeDbApi(raw) as never);
+    seedSeptember(raw);
     await reconcileSharedTransactions('user-1', makeDbApi(raw) as never);
     expect(count(raw, 'transactions')).toBe(1);
 

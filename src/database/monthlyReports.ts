@@ -4,6 +4,7 @@ import { getDatabase } from './database';
 import { getMonthData } from './queries';
 import { getAllBudgets } from './budgets';
 import { getAllFixedExpenses } from './fixedExpenses';
+import { getMonthPlanEvents } from './monthPlan';
 import { buildMonthlyReport, type MonthlyReport } from '../services/monthly-report-service';
 
 /**
@@ -19,13 +20,19 @@ export async function getMonthlyReport(
   if (!data || !data.month.isClosed) {
     return null;
   }
-  const [budgetRows, fixedExpenseRows] = await Promise.all([
+  const [budgetRows, fixedExpenseRows, planEvents] = await Promise.all([
     getAllBudgets(database),
     getAllFixedExpenses(database),
+    getMonthPlanEvents(monthKey, database),
   ]);
   const budgetDefinitions = Object.fromEntries(budgetRows.map((budget) => [budget.id, budget]));
   const fixedExpenseDefinitions = Object.fromEntries(
     fixedExpenseRows.map((expense) => [expense.id, expense])
   );
-  return buildMonthlyReport({ ...data, budgetDefinitions, fixedExpenseDefinitions });
+  return buildMonthlyReport({
+    ...data,
+    budgetDefinitions,
+    fixedExpenseDefinitions,
+    planEvents,
+  });
 }

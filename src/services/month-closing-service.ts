@@ -2,10 +2,10 @@ import dayjs, { type Dayjs } from 'dayjs';
 import type { Month, MonthKey } from '../models';
 
 /** Hours before month end at which the closing window opens. */
-export const CLOSING_WINDOW_LEAD_HOURS = 36;
+export const CLOSING_WINDOW_LEAD_HOURS = 24;
 
 /** Hours after month end during which the month can still be closed. */
-export const CLOSING_WINDOW_TRAIL_HOURS = 24;
+export const CLOSING_WINDOW_TRAIL_HOURS = 36;
 
 export interface MonthClosingWindow {
   start: Dayjs;
@@ -13,9 +13,9 @@ export interface MonthClosingWindow {
 }
 
 /**
- * The period in which a month can be closed: it opens 36 hours before the month
- * ends and closes 24 hours after. A 31-day month is therefore closable from noon
- * on the 29th until midnight at the end of the 1st of the next month.
+ * The period in which a month can be closed: it opens 24 hours before the month
+ * ends and closes 36 hours after. A 31-day month is therefore closable from
+ * midnight at the start of its 31st until noon on the 2nd of the next month.
  */
 export function monthClosingWindow(monthKey: MonthKey): MonthClosingWindow {
   const monthEnd = dayjs(`${monthKey}-01`).add(1, 'month').startOf('day');

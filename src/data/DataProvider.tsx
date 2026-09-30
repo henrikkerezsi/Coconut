@@ -88,6 +88,7 @@ import {
   upsertMerchantSuggestion,
 } from '../database/reserve';
 import { getMonthData } from '../database/queries';
+import { reconcileSharedTransactionsForLocalUser } from '../database/sharedLinking';
 import { syncSharedChanges } from '../sync/engine';
 import {
   buildAutomaticReserveTransfer,
@@ -631,6 +632,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       startMonth: async (input) => {
         const db = await getDatabase();
         await createPlannedMonth(input, db);
+        // Shared expenses belonging to this month were held back while it did
+        // not exist, because mirroring one may never create a month of its own.
+        // Now that the user has planned it they can be recorded.
+        await reconcileSharedTransactionsForLocalUser(db);
         await refresh();
       },
       replanMonth: async (input) => {

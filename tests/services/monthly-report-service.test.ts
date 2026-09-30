@@ -5,6 +5,7 @@ import type {
   Month,
   MonthBudget,
   MonthFixedExpense,
+  MonthPlanEvent,
   MonthSubscription,
   Transaction,
 } from '../../src/models';
@@ -13,6 +14,7 @@ import {
   reportBudgets,
   reportFixedExpenses,
   reportSubscriptions,
+  summarizeMonthPlan,
   type MonthlyReportInput,
 } from '../../src/services/monthly-report-service';
 import { forecastMonth } from '../../src/services/forecast-service';
@@ -119,7 +121,21 @@ function input(overrides: Partial<MonthlyReportInput> = {}): MonthlyReportInput 
     subscriptions: [],
     fixedExpenseDefinitions: {},
     budgetDefinitions: {},
+    planEvents: [],
     ...overrides,
+  };
+}
+
+function planEvent(event: Partial<MonthPlanEvent> & Pick<MonthPlanEvent, 'kind'>): MonthPlanEvent {
+  return {
+    id: 1,
+    monthKey: MONTH_KEY,
+    budgetId: null,
+    previousAmountCents: 0,
+    newAmountCents: 0,
+    fundedBudgetId: null,
+    createdAt: '2026-09-01T00:00:00.000Z',
+    ...event,
   };
 }
 
@@ -181,7 +197,13 @@ describe('reportBudgets', () => {
       [transaction(1, 12000), transaction(1, 4500)]
     );
     expect(report).toEqual([
-      { name: 'Groceries', plannedCents: 20000, spentCents: 16500, remainingCents: 3500 },
+      {
+        name: 'Groceries',
+        startingCents: null,
+        plannedCents: 20000,
+        spentCents: 16500,
+        remainingCents: 3500,
+      },
     ]);
   });
 
@@ -200,6 +222,7 @@ describe('reportBudgets', () => {
     ]);
     expect(report).toContainEqual({
       name: 'No budget',
+      startingCents: null,
       plannedCents: 0,
       spentCents: 9000,
       remainingCents: -9000,
@@ -212,6 +235,64 @@ describe('reportBudgets', () => {
       transaction(1, 3000),
     ]);
     expect(report.map((entry) => entry.name)).toEqual(['A']);
+  });
+
+  it('reports the opening amount of a budget the plan record opens', () => {
+    const report = reportBudgets([monthBudget(1, 20000)], { 1: budget(1, 'Groceries') }, [], {
+      startingByBudget: new Map([[1, 15000]]),
+      initialDrawCents: null,
+      endingDrawCents: null,
+    });
+    expect(report[0].startingCents).toBe(15000);
+    expect(report[0].plannedCents).toBe(20000);
+  });
+});
+
+describe('summarizeMonthPlan', () => {
+  it('reads the opening amount of a budget from its initial event', () => {
+    const summary = summarizeMonthPlan([
+      planEvent({ kind: 'initial', budgetId: 1, newAmountCents: 25000 }),
+    ]);
+    expect(summary.startingByBudget.get(1)).toBe(25000);
+  });
+
+  it('keeps the first opening event when a budget is re-planned', () => {
+    const summary = summarizeMonthPlan([
+      planEvent({ id: 1, kind: 'initial', budgetId: 1, newAmountCents: 25000 }),
+      planEvent({ id: 2, kind: 'budget', budgetId: 1, previousAmountCents: 25000, newAmountCents: 30000 }),
+      planEvent({ id: 3, kind: 'budget', budgetId: 1, previousAmountCents: 30000, newAmountCents: 28000 }),
+    ]);
+    expect(summary.startingByBudget.get(1)).toBe(25000);
+  });
+
+  it('leaves a budget with no initial event out rather than guessing a start', () => {
+    const summary = summarizeMonthPlan([
+      planEvent({ id: 1, kind: 'budget', budgetId: 1, previousAmountCents: 10000, newAmountCents: 12000 }),
+    ]);
+    expect(summary.startingByBudget.has(1)).toBe(false);
+  });
+
+  it('reads the draw at both ends of the month', () => {
+    const summary = summarizeMonthPlan([
+      planEvent({ id: 1, kind: 'draw', newAmountCents: 20000 }),
+      planEvent({ id: 2, kind: 'draw', previousAmountCents: 20000, newAmountCents: 35000 }),
+    ]);
+    expect(summary.initialDrawCents).toBe(20000);
+    expect(summary.endingDrawCents).toBe(35000);
+  });
+
+  it('reports no draw at all for a month that never planned one', () => {
+    const summary = summarizeMonthPlan([planEvent({ kind: 'initial', budgetId: 1, newAmountCents: 1000 })]);
+    expect(summary.initialDrawCents).toBeNull();
+    expect(summary.endingDrawCents).toBeNull();
+  });
+
+  it('ignores a funded budget, which is not a draw amount', () => {
+    const summary = summarizeMonthPlan([
+      planEvent({ kind: 'draw', newAmountCents: 20000, fundedBudgetId: 1 }),
+    ]);
+    expect(summary.endingDrawCents).toBe(20000);
+    expect(summary.startingByBudget.size).toBe(0);
   });
 });
 
@@ -275,12 +356,67 @@ describe('buildMonthlyReport', () => {
     );
     expect(report.budgets).toContainEqual({
       name: 'No budget',
+      startingCents: null,
       plannedCents: 0,
       spentCents: 3000,
       remainingCents: -3000,
     });
     expect(report.budgetSpentTotalCents).toBe(8000);
     expect(report.spendingCents).toBe(8000);
+  });
+
+  it('reports where each budget started and what it was adjusted to at closing', () => {
+    const report = buildMonthlyReport(
+      input({
+        budgets: [monthBudget(1, 20000), monthBudget(2, 9000)],
+        transactions: [transaction(1, 12000)],
+        budgetDefinitions: { 1: budget(1, 'Groceries'), 2: budget(2, 'Transport') },
+        planEvents: [
+          planEvent({ id: 1, kind: 'initial', budgetId: 1, newAmountCents: 15000 }),
+          planEvent({ id: 2, kind: 'initial', budgetId: 2, newAmountCents: 9000 }),
+          planEvent({
+            id: 3,
+            kind: 'budget',
+            budgetId: 1,
+            previousAmountCents: 15000,
+            newAmountCents: 20000,
+          }),
+        ],
+      })
+    );
+    const groceries = report.budgets.find((entry) => entry.name === 'Groceries');
+    const transport = report.budgets.find((entry) => entry.name === 'Transport');
+    expect(groceries?.startingCents).toBe(15000);
+    expect(groceries?.plannedCents).toBe(20000);
+    expect(transport?.startingCents).toBe(9000);
+    expect(transport?.plannedCents).toBe(9000);
+  });
+
+  it('leaves the starting amount unknown for a month with no plan record', () => {
+    const report = buildMonthlyReport(
+      input({
+        budgets: [monthBudget(1, 20000)],
+        budgetDefinitions: { 1: budget(1, 'Groceries') },
+        planEvents: [],
+      })
+    );
+    expect(report.budgets[0].startingCents).toBeNull();
+    expect(report.budgets[0].plannedCents).toBe(20000);
+    expect(report.initialDrawCents).toBeNull();
+    expect(report.endingDrawCents).toBeNull();
+  });
+
+  it('carries the planned draw at both ends of the month into the report', () => {
+    const report = buildMonthlyReport(
+      input({
+        planEvents: [
+          planEvent({ id: 1, kind: 'draw', newAmountCents: 20000 }),
+          planEvent({ id: 2, kind: 'draw', previousAmountCents: 20000, newAmountCents: 35000 }),
+        ],
+      })
+    );
+    expect(report.initialDrawCents).toBe(20000);
+    expect(report.endingDrawCents).toBe(35000);
   });
 
   it('spends the same as the month forecast for the same data', () => {

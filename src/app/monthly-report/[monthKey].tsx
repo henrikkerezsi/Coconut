@@ -176,6 +176,13 @@ export default function MonthlyReportScreen() {
                       {over ? ' • over' : ''}
                     </Text>
                   </View>
+                  {budget.startingCents !== null && (
+                    <Text variant="bodySmall" style={styles.planLine}>
+                      {budget.startingCents === budget.plannedCents
+                        ? `Planned at ${formatCents(budget.plannedCents, symbol)}, never adjusted`
+                        : `Started at ${formatCents(budget.startingCents, symbol)} • adjusted to ${formatCents(budget.plannedCents, symbol)}`}
+                    </Text>
+                  )}
                   <ReportRow
                     label={over ? 'Over by' : 'Remaining'}
                     value={over ? formatCents(-budget.remainingCents, symbol) : formatCents(budget.remainingCents, symbol)}
@@ -187,6 +194,25 @@ export default function MonthlyReportScreen() {
           )}
         </Card.Content>
       </Card>
+
+      {report.endingDrawCents !== null && (
+        <Card mode="elevated" style={styles.card} contentStyle={styles.cardContent}>
+          <Card.Title
+            title="Planned reserve draw"
+            subtitle="What the month intended to move through the reserve"
+          />
+          <Card.Content>
+            <ReportRow
+              label="Planned at the start"
+              value={formatCents(report.initialDrawCents ?? 0, symbol)}
+            />
+            <ReportRow
+              label="Left planning at"
+              value={formatCents(report.endingDrawCents, symbol)}
+            />
+          </Card.Content>
+        </Card>
+      )}
 
       <Card mode="elevated" style={styles.card} contentStyle={styles.cardContent}>
         <Card.Title title="Savings reserve" />
@@ -239,6 +265,10 @@ const styles = StyleSheet.create({
   },
   budgetRow: {
     marginVertical: 6,
+  },
+  planLine: {
+    opacity: 0.6,
+    paddingBottom: 2,
   },
   empty: {
     opacity: 0.6,

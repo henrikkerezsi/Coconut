@@ -280,6 +280,10 @@ describe('leaveSharedSpace', () => {
       `INSERT INTO shared_expense_splits (expense_id, member_id, amount_cents)
        VALUES (${expenseId}, ${memberOne}, 4000), (${expenseId}, ${memberTwo}, 6000)`
     );
+    raw.exec(
+      `INSERT INTO months (month_key, allowance_cents, starting_reserve_cents)
+       VALUES ('2026-09', 100000, 0)`
+    );
     await reconcileSharedTransactions('user-1', api);
     const linkedBefore = raw.prepare('SELECT origin_type FROM transactions').all() as Array<{
       origin_type: string;
@@ -408,6 +412,10 @@ describe('deleteSharedSpace', () => {
     raw.exec(
       `INSERT INTO shared_expense_splits (expense_id, member_id, amount_cents)
        VALUES (${expenseId}, ${memberOne}, 4000), (${expenseId}, ${memberTwo}, 6000)`
+    );
+    raw.exec(
+      `INSERT INTO months (month_key, allowance_cents, starting_reserve_cents)
+       VALUES ('2026-09', 100000, 0)`
     );
     await reconcileSharedTransactions('user-1', api);
     const linkedBefore = raw.prepare('SELECT origin_type, origin_id FROM transactions').all() as Array<{

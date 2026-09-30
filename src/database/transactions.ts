@@ -222,8 +222,16 @@ export async function upsertSharedTransaction(
   db?: SQLiteDatabase
 ): Promise<number> {
   const database = db ?? (await getDatabase());
-  const existing = await database.getFirstAsync<{ id: number }>(
-    `SELECT id FROM transactions WHERE origin_type = 'shared' AND origin_id = ? LIMIT 1`,
+  const existing = await database.getFirstAsync<{
+    id: number;
+    month_key: string;
+    date: string;
+    amount_cents: number;
+    merchant: string | null;
+    note: string | null;
+  }>(
+    `SELECT id, month_key, date, amount_cents, merchant, note FROM transactions
+     WHERE origin_type = 'shared' AND origin_id = ? LIMIT 1`,
     [originId]
   );
   if (existing) {
@@ -231,6 +239,18 @@ export async function upsertSharedTransaction(
     // rating untouched when re-deriving the linked transaction; all three are
     // editable on the mirror and must survive shared-expense changes.
     const monthKey = monthKeyOf(input.date);
+    const unchanged =
+      existing.month_key === monthKey &&
+      existing.date === input.date &&
+      existing.amount_cents === input.amountCents &&
+      existing.merchant === input.merchant &&
+      existing.note === input.note;
+    // Skipping an identical write keeps reconciliation free of side effects: any
+    // UPDATE would restamp `updated_at` and re-queue the row in the outbox, so
+    // always writing would have every sync re-push mirrors nothing had changed.
+    if (unchanged) {
+      return existing.id;
+    }
     await database.runAsync(
       `UPDATE transactions SET month_key = ?, date = ?, amount_cents = ?, merchant = ?, note = ?
        WHERE id = ?`,

@@ -118,6 +118,12 @@ export async function syncNow(db?: SQLiteDatabase): Promise<SyncOutcome | null> 
       const pushResult = await pushChanges(client, database, true);
       const since = state.lastSyncAt ?? EPOCH;
       const pullResult = await pullChanges(client, database, since);
+      // Personal rows are pulled after the shared ones, and a shared mirror is
+      // itself a synced transaction. A device that placed the mirror in another
+      // month would otherwise have that month applied here with no check, so the
+      // mirrors are re-derived once more to put each one back in the month its
+      // expense belongs to.
+      await reconcileSharedTransactions(user.id, database);
       await setMeta(SHARED_LAST_SYNC_KEY, nowIso(), database);
       await updateSyncState({
         lastSyncAt: nowIso(),

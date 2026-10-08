@@ -9,6 +9,7 @@ import { DateField } from './date-field';
 import { DAYJS_STORE_DATE_FORMAT, monthLabel } from '../utils/date';
 import dayjs from 'dayjs';
 import type { TransactionInput } from '../database/transactions';
+import type { BudgetWithStatus } from '../data/DataProvider';
 import { useAppTheme } from '../theme';
 import {
   activeMonthDateWindow,
@@ -19,6 +20,7 @@ import {
 interface TransactionFormProps {
   initial?: Transaction;
   budgets: Budget[];
+  budgetStatuses: BudgetWithStatus[];
   symbol: string;
   /**
    * The period the app is working on. A transaction can only be dated inside
@@ -32,6 +34,7 @@ interface TransactionFormProps {
 export function TransactionForm({
   initial,
   budgets,
+  budgetStatuses,
   symbol,
   activeMonthKey,
   suggestMerchant,
@@ -161,7 +164,14 @@ export function TransactionForm({
           ))}
         </View>
       ) : null}
-      <BudgetSelect budgets={budgets} selectedId={budgetId} onSelect={setBudgetId} symbol={symbol} />
+      <BudgetSelect
+        budgets={budgets}
+        selectedId={budgetId}
+        onSelect={setBudgetId}
+        symbol={symbol}
+        budgetStatuses={budgetStatuses}
+        editedTransaction={initial ?? null}
+      />
       <TextInput
         label="Note"
         mode="outlined"

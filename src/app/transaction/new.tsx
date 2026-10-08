@@ -6,13 +6,15 @@ import { useAppData } from '../../data/DataProvider';
 import { TransactionForm } from '../../components/transaction-form';
 
 export default function NewTransactionScreen() {
-  const { budgets, settings, activeMonthKey, addTransaction, suggestBudgets } = useAppData();
+  const { budgets, settings, activeMonthKey, addTransaction, suggestBudgets, currentDashboard } =
+    useAppData();
   const router = useRouter();
 
   return (
     <KeyboardAwareScrollView contentContainerStyle={styles.container}>
       <TransactionForm
         budgets={budgets}
+        budgetStatuses={currentDashboard?.budgetStatuses ?? []}
         symbol={settings.currencySymbol}
         activeMonthKey={activeMonthKey}
         suggestMerchant={suggestBudgets}

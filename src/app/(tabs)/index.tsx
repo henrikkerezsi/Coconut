@@ -107,6 +107,7 @@ export default function OverviewScreen() {
             <AnimatedNumber
               value={reserveProjection.endingReserveCents}
               format={(v) => formatCents(v, symbol)}
+              style={{ color: theme.colors.onSurface }}
             />
           </View>
         </Card.Content>

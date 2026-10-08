@@ -190,6 +190,7 @@ export default function CloseMonthScreen() {
               <AnimatedNumber
                 value={reserveProjection?.endingReserveCents ?? 0}
                 format={(value) => formatCents(value, symbol)}
+                style={{ color: theme.colors.onSurface }}
               />
             </View>
           </Card.Content>

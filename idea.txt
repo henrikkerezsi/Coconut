@@ -373,10 +373,10 @@ Chronological list of actual transactions.
 Historical financial information and trends:
 - Monthly spending history.
 - Average monthly spending.
-- Spending by category.
-- Budget performance.
+- Budget usage (spend vs. its monthly plan, averaged).
 - Fixed-expense history.
 - Savings-reserve development.
+- Savings trend (monthly amount added to or drawn from the reserve).
 - Historical differences between allowance and actual spending.
 
 Focused on useful personal budgeting information, not comprehensive financial analytics.

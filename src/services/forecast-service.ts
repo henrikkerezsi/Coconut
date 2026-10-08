@@ -65,6 +65,35 @@ export function budgetStatus(plannedAmountCents: number, spentCents: number): Bu
   };
 }
 
+export interface BudgetAvailableEntry {
+  budgetId: number;
+  plannedCents: number;
+  spentCents: number;
+}
+
+/**
+ * What is left to spend on each budget this month: the month's planned amount
+ * minus what has been charged against it. The transaction being edited is
+ * already part of `spentCents`, so when one is given it is taken back out —
+ * the figure then shows the room the budget still has in total, including the
+ * amount currently being edited. A budget with no plan for the month gets no
+ * entry, and callers should show no amount for it.
+ */
+export function budgetAvailableAmounts(
+  entries: readonly BudgetAvailableEntry[],
+  editedTransaction: { budgetId: number | null; amountCents: number } | null
+): Map<number, number> {
+  const available = new Map<number, number>();
+  for (const entry of entries) {
+    const spentCents =
+      editedTransaction !== null && editedTransaction.budgetId === entry.budgetId
+        ? Math.max(entry.spentCents - editedTransaction.amountCents, 0)
+        : entry.spentCents;
+    available.set(entry.budgetId, entry.plannedCents - spentCents);
+  }
+  return available;
+}
+
 export interface MonthForecast {
   allowanceCents: number;
   incomeTotalCents: number;

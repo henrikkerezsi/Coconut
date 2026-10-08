@@ -7,6 +7,7 @@ import type {
   Transaction,
 } from '../../src/models';
 import {
+  budgetAvailableAmounts,
   budgetStatus,
   fixedExpenseAmount,
   forecastMonth,
@@ -135,6 +136,68 @@ describe('budgetStatus', () => {
     const status = budgetStatus(30000, 35000);
     expect(status.remainingCents).toBe(-5000);
     expect(status.differenceCents).toBe(5000);
+  });
+});
+
+describe('budgetAvailableAmounts', () => {
+  it('shows the month plan minus what has been spent', () => {
+    const available = budgetAvailableAmounts(
+      [{ budgetId: 1, plannedCents: 30000, spentCents: 18000 }],
+      null
+    );
+    expect(available.get(1)).toBe(12000);
+  });
+
+  it('takes the edited transaction back out of the spent amount', () => {
+    const available = budgetAvailableAmounts(
+      [{ budgetId: 1, plannedCents: 30000, spentCents: 18000 }],
+      { budgetId: 1, amountCents: 5000 }
+    );
+    expect(available.get(1)).toBe(17000);
+  });
+
+  it('leaves other budgets untouched by the edited transaction', () => {
+    const available = budgetAvailableAmounts(
+      [
+        { budgetId: 1, plannedCents: 30000, spentCents: 18000 },
+        { budgetId: 2, plannedCents: 10000, spentCents: 2000 },
+      ],
+      { budgetId: 1, amountCents: 5000 }
+    );
+    expect(available.get(1)).toBe(17000);
+    expect(available.get(2)).toBe(8000);
+  });
+
+  it('ignores an edited transaction that carries no budget', () => {
+    const available = budgetAvailableAmounts(
+      [{ budgetId: 1, plannedCents: 30000, spentCents: 18000 }],
+      { budgetId: null, amountCents: 5000 }
+    );
+    expect(available.get(1)).toBe(12000);
+  });
+
+  it('never lets spent go below zero when the edited amount is not part of it', () => {
+    const available = budgetAvailableAmounts(
+      [{ budgetId: 1, plannedCents: 30000, spentCents: 2000 }],
+      { budgetId: 1, amountCents: 5000 }
+    );
+    expect(available.get(1)).toBe(30000);
+  });
+
+  it('reports a negative amount once spending passes the plan', () => {
+    const available = budgetAvailableAmounts(
+      [{ budgetId: 1, plannedCents: 10000, spentCents: 12500 }],
+      null
+    );
+    expect(available.get(1)).toBe(-2500);
+  });
+
+  it('has no entry for a budget without a month plan', () => {
+    const available = budgetAvailableAmounts(
+      [{ budgetId: 1, plannedCents: 30000, spentCents: 0 }],
+      null
+    );
+    expect(available.has(2)).toBe(false);
   });
 });
 

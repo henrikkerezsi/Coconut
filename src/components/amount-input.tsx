@@ -43,9 +43,27 @@ export function AmountInput({
 
   const handleChange = (next: string) => {
     setText(next);
+    const trimmed = next.trim();
+    if (trimmed === '') {
+      lastEmitted.current = null;
+      onChange(null);
+      return;
+    }
+    // Don't commit if ends with decimal separator (still typing)
+    if (/[.,]$/.test(trimmed)) {
+      return;
+    }
+    // Also handle case like "-." 
+    if (/^[-+]?[.,]$/.test(trimmed) || /^[-+]?\d+[.,]$/.test(trimmed)) {
+      return;
+    }
     const nextCents = centsFromString(next);
-    lastEmitted.current = nextCents;
-    onChange(nextCents);
+    if (nextCents !== null) {
+      lastEmitted.current = nextCents;
+      onChange(nextCents);
+      return;
+    }
+    // If parsing fails and not empty, don't emit - preserve last valid value
   };
 
   // The decimal pad on Android has no minus key, so the sign is flipped here
@@ -61,6 +79,19 @@ export function AmountInput({
     onChange(next);
   };
 
+  const formatOnBlur = () => {
+    const current = centsFromString(text);
+    if (current === null) {
+      lastEmitted.current = null;
+      setText('');
+      onChange(null);
+      return;
+    }
+    lastEmitted.current = current;
+    setText(centsToRawInput(current));
+    onChange(current);
+  };
+
   const negative = (value ?? 0) < 0;
 
   return (
@@ -70,6 +101,7 @@ export function AmountInput({
         mode="outlined"
         value={text}
         onChangeText={handleChange}
+        onBlur={formatOnBlur}
         keyboardType="decimal-pad"
         autoFocus={autoFocus}
         error={Boolean(error)}

@@ -25,7 +25,11 @@ import { getAllSubscriptions } from './subscriptions';
 import { getSettings } from './settings';
 import { getPlannedDrawCents } from './monthPlan';
 import { forecastMonth } from '../services/forecast-service';
-import { spendingByCategory } from '../services/statistics-service';
+import {
+  averageBudgetPerformance,
+  ratingSharesForMonth,
+  type BudgetMonthPerformance,
+} from '../services/statistics-service';
 import { estimateAmount } from '../services/estimation-service';
 import { subscriptionChargesForMonth } from '../services/subscription-service';
 
@@ -237,64 +241,103 @@ export async function getMonthPlanningInputs(
   };
 }
 
-export interface CategoryPerformance {
-  budgetId: number;
-  name: string;
-  plannedCents: number;
-  spentCents: number;
+export interface RatingPerformancePoint {
+  monthKey: MonthKey;
+  regret: number;
+  neutral: number;
+  good: number;
 }
 
 /**
- * Planned vs. spent totals per budget across all closed months.
+ * Per closed month, the share of its transactions rated regret, neutral and
+ * good. Unrated purchases count as neutral. Months without transactions are
+ * omitted.
  */
-export async function getCategoryPerformance(
+export async function getRatingPerformance(
   db?: SQLiteDatabase
-): Promise<CategoryPerformance[]> {
+): Promise<RatingPerformancePoint[]> {
   const database = db ?? (await getDatabase());
-  const budgetsRow = await getAllBudgets(database);
+  const closedMonths = await getClosedMonths(database);
+  const closedSet = new Set(closedMonths.map((month) => month.monthKey));
+  const transactionsByMonth = new Map<MonthKey, Transaction[]>();
+  for (const transaction of await getAllTransactions(database)) {
+    if (!closedSet.has(transaction.monthKey)) {
+      continue;
+    }
+    const list = transactionsByMonth.get(transaction.monthKey) ?? [];
+    list.push(transaction);
+    transactionsByMonth.set(transaction.monthKey, list);
+  }
+  const points: RatingPerformancePoint[] = [];
+  for (const month of closedMonths) {
+    const shares = ratingSharesForMonth(transactionsByMonth.get(month.monthKey) ?? []);
+    if (shares) {
+      points.push({ monthKey: month.monthKey, ...shares });
+    }
+  }
+  return points;
+}
+
+export interface BudgetPerformanceRecord {
+  budgetId: number;
+  name: string;
+  /** Average of each closed month's spent-to-planned ratio, as a percentage. */
+  averagePercent: number | null;
+}
+
+/**
+ * Per-budget performance across closed months: the percentage of its monthly
+ * plan that was spent, averaged over every month the budget was allocated. The
+ * averaging is deliberately per month rather than over the summed totals, so a
+ * month where spending ran 110% and another where it ran 90% average to 100%.
+ */
+export async function getBudgetPerformance(
+  db?: SQLiteDatabase
+): Promise<BudgetPerformanceRecord[]> {
+  const database = db ?? (await getDatabase());
+  const budgetRows = await getAllBudgets(database);
   const monthBudgets = await getAllMonthBudgets(database);
   const transactions = await getAllTransactions(database);
 
   const closedMonths = (await getClosedMonths(database)).map((month) => month.monthKey);
   const closedSet = new Set(closedMonths);
 
-  const plannedByBudget = new Map<number, number>();
-  for (const monthBudget of monthBudgets) {
-    if (!closedSet.has(monthBudget.monthKey)) {
-      continue;
-    }
-    plannedByBudget.set(
-      monthBudget.budgetId,
-      (plannedByBudget.get(monthBudget.budgetId) ?? 0) + monthBudget.plannedAmountCents
-    );
-  }
-  const spentByBudget = new Map<number, number>();
+  const spentByBudgetByMonth = new Map<number, Map<MonthKey, number>>();
   for (const transaction of transactions) {
     if (!closedSet.has(transaction.monthKey) || transaction.budgetId === null) {
       continue;
     }
-    spentByBudget.set(
-      transaction.budgetId,
-      (spentByBudget.get(transaction.budgetId) ?? 0) + transaction.amountCents
+    let byMonth = spentByBudgetByMonth.get(transaction.budgetId);
+    if (!byMonth) {
+      byMonth = new Map();
+      spentByBudgetByMonth.set(transaction.budgetId, byMonth);
+    }
+    byMonth.set(
+      transaction.monthKey,
+      (byMonth.get(transaction.monthKey) ?? 0) + transaction.amountCents
     );
   }
 
-  const names = new Map(budgetsRow.map((budget) => [budget.id, budget.name]));
-  const ids = new Set<number>([...plannedByBudget.keys(), ...spentByBudget.keys()]);
-  return [...ids]
-    .map((budgetId) => ({
+  const monthsByBudget = new Map<number, BudgetMonthPerformance[]>();
+  for (const monthBudget of monthBudgets) {
+    if (!closedSet.has(monthBudget.monthKey)) {
+      continue;
+    }
+    const spent = spentByBudgetByMonth.get(monthBudget.budgetId)?.get(monthBudget.monthKey) ?? 0;
+    const list = monthsByBudget.get(monthBudget.budgetId) ?? [];
+    list.push({ plannedCents: monthBudget.plannedAmountCents, spentCents: spent });
+    monthsByBudget.set(monthBudget.budgetId, list);
+  }
+
+  const names = new Map(budgetRows.map((budget) => [budget.id, budget.name]));
+  return [...monthsByBudget.entries()]
+    .map(([budgetId, months]) => ({
       budgetId,
       name: names.get(budgetId) ?? `Budget #${budgetId}`,
-      plannedCents: plannedByBudget.get(budgetId) ?? 0,
-      spentCents: spentByBudget.get(budgetId) ?? 0,
+      averagePercent: averageBudgetPerformance(months),
     }))
-    .sort((a, b) => b.spentCents - a.spentCents);
-}
-
-export async function getAllTimeSpendingByCategory(
-  db?: SQLiteDatabase
-): Promise<Map<number, number>> {
-  const database = db ?? (await getDatabase());
-  const transactions = await getAllTransactions(database);
-  return spendingByCategory(transactions);
+    .sort(
+      (a, b) =>
+        (b.averagePercent ?? -1) - (a.averagePercent ?? -1) || a.budgetId - b.budgetId
+    );
 }

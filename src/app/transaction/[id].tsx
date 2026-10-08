@@ -24,6 +24,7 @@ export default function EditTransactionScreen() {
     settings,
     activeMonthKey,
     allMonths,
+    currentDashboard,
     saveTransaction,
     saveTransactionAttachment,
     saveTransactionBudget,
@@ -108,6 +109,7 @@ export default function EditTransactionScreen() {
       return;
     }
     setBudgetId(next);
+    setTransaction({ ...transaction, budgetId: next });
     void saveTransactionBudget(transaction.id, next);
   };
 
@@ -157,6 +159,12 @@ export default function EditTransactionScreen() {
             selectedId={budgetId}
             onSelect={handleBudgetChange}
             symbol={settings.currencySymbol}
+            budgetStatuses={
+              currentDashboard && currentDashboard.monthKey === transaction.monthKey
+                ? currentDashboard.budgetStatuses
+                : []
+            }
+            editedTransaction={transaction}
           />
           <Text variant="bodySmall" style={styles.attachmentHint}>
             Attachment is kept on this device only.
@@ -178,6 +186,7 @@ export default function EditTransactionScreen() {
         <TransactionForm
           initial={transaction}
           budgets={budgets}
+          budgetStatuses={currentDashboard?.budgetStatuses ?? []}
           symbol={settings.currencySymbol}
           activeMonthKey={activeMonthKey}
           suggestMerchant={suggestBudgets}

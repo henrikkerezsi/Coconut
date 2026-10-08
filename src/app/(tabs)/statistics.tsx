@@ -4,33 +4,38 @@ import { KeyboardAwareScrollView } from '../../components/keyboard-aware-scroll-
 import { Card, List, ProgressBar, Text } from 'react-native-paper';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useAppData } from '../../data/DataProvider';
-import type { ClosedMonthRecord, CategoryPerformance } from '../../database/queries';
+import type {
+  BudgetPerformanceRecord,
+  ClosedMonthRecord,
+  RatingPerformancePoint,
+} from '../../database/queries';
 import {
-  getCategoryPerformance,
+  getBudgetPerformance,
   getClosedMonthRecords,
-  getAllTimeSpendingByCategory,
+  getRatingPerformance,
 } from '../../database/queries';
 import {
   averageMonthlySpending,
   averageReserveAdjustment,
   highestMonthlySpending,
+  medianMonthlySpending,
 } from '../../services/statistics-service';
 import { formatCents } from '../../utils/currency';
 import { StatCard } from '../../components/stat-card';
+import { MonthlySpendChart } from '../../components/monthly-spend-chart';
+import { SpendingPerformanceChart } from '../../components/spending-performance-chart';
+import { SavingsTrendChart } from '../../components/savings-trend-chart';
 import { LoadingScreen } from '../../components/loading-screen';
 import { useAppTheme } from '../../theme';
 import { ScreenFade } from '../../components/screen-fade';
-import { FadeIn } from '../../components/fade-in';
 
 export default function StatisticsScreen() {
-  const { ready, settings, budgets } = useAppData();
+  const { ready, settings } = useAppData();
   const theme = useAppTheme();
   const router = useRouter();
   const [records, setRecords] = useState<ClosedMonthRecord[]>([]);
-  const [categories, setCategories] = useState<CategoryPerformance[]>([]);
-  const [allTimeByCategory, setAllTimeByCategory] = useState<Map<number, number>>(
-    new Map()
-  );
+  const [performance, setPerformance] = useState<BudgetPerformanceRecord[]>([]);
+  const [ratingPerformance, setRatingPerformance] = useState<RatingPerformancePoint[]>([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -38,8 +43,8 @@ export default function StatisticsScreen() {
         return;
       }
       getClosedMonthRecords().then(setRecords);
-      getCategoryPerformance().then(setCategories);
-      getAllTimeSpendingByCategory().then(setAllTimeByCategory);
+      getBudgetPerformance().then(setPerformance);
+      getRatingPerformance().then(setRatingPerformance);
     }, [ready])
   );
 
@@ -51,7 +56,7 @@ export default function StatisticsScreen() {
   const average = averageMonthlySpending(records);
   const highest = highestMonthlySpending(records);
   const averageAdjustment = averageReserveAdjustment(records);
-  const budgetNames = new Map(budgets.map((budget) => [budget.id, budget.name]));
+  const median = medianMonthlySpending(records);
 
   return (
     <ScreenFade>
@@ -101,53 +106,127 @@ export default function StatisticsScreen() {
       </Card>
 
       <Card mode="elevated" style={styles.card}>
-        <Card.Title title="Spending by budget" />
+        <View style={styles.chartHeader}>
+          <Text variant="titleMedium">Monthly spend</Text>
+          {median !== null ? (
+            <View
+              style={[
+                styles.medianBubble,
+                { backgroundColor: theme.colors.primaryContainer, borderRadius: theme.radii.pill },
+                theme.elevation.level2,
+              ]}
+            >
+              <Text variant="labelMedium" style={{ color: theme.colors.onPrimaryContainer }}>
+                {`Median ${formatCents(median, symbol)}`}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+        {records.length === 0 ? (
+          <Text variant="bodyMedium" style={styles.chartEmpty}>
+            Close a month to chart its spending.
+          </Text>
+        ) : (
+          <View style={styles.chartBody}>
+            <MonthlySpendChart
+              points={records.map((record) => ({
+                monthKey: record.monthKey,
+                valueCents: record.spendingCents,
+              }))}
+              medianCents={median ?? 0}
+              symbol={symbol}
+            />
+          </View>
+        )}
+      </Card>
+      <Card mode="elevated" style={styles.card}>
+        <Card.Title
+          title="Spending performance"
+          subtitle="Share of transactions rated regret, neutral, and good"
+        />
+        <View style={styles.legend}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: theme.semantic.error }]} />
+            <Text variant="labelSmall">Regret</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: theme.colors.outline }]} />
+            <Text variant="labelSmall">Neutral</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: theme.semantic.success }]} />
+            <Text variant="labelSmall">Good</Text>
+          </View>
+        </View>
+        {ratingPerformance.length === 0 ? (
+          <Text variant="bodyMedium" style={styles.chartEmpty}>
+            Close a month with transactions to chart its spending performance.
+          </Text>
+        ) : (
+          <View style={styles.chartBody}>
+            <SpendingPerformanceChart points={ratingPerformance} />
+          </View>
+        )}
+      </Card>
+
+      <Card mode="elevated" style={styles.card}>
+        <Card.Title
+          title="Savings trend"
+          subtitle="Money added to or drawn from the reserve each month"
+        />
         <Card.Content>
-          {allTimeByCategory.size === 0 ? (
-            <Text variant="bodyMedium" style={styles.empty}>
-              No spending assigned to budgets yet.
+          {records.length === 0 ? (
+            <Text variant="bodyMedium" style={styles.chartEmpty}>
+              Close a month to chart how the reserve moves.
             </Text>
           ) : (
-            [...allTimeByCategory.entries()]
-              .sort((a, b) => b[1] - a[1])
-              .map(([budgetId, total]) => (
-                <FadeIn key={String(budgetId)}>
-                  <List.Item
-                    title={budgetNames.get(budgetId) ?? `Budget #${budgetId}`}
-                    right={() => <Text variant="bodyLarge">{formatCents(total, symbol)}</Text>}
-                  />
-                </FadeIn>
-              ))
+            <SavingsTrendChart
+              points={records.map((record) => ({
+                monthKey: record.monthKey,
+                adjustmentCents: record.reserveAdjustmentCents,
+              }))}
+              symbol={symbol}
+            />
           )}
         </Card.Content>
       </Card>
 
       <Card mode="elevated" style={styles.card}>
-        <Card.Title title="Budget performance (closed months)" />
+        <Card.Title
+          title="Budget usage"
+          subtitle="Average of each month's spend vs. its plan"
+        />
         <Card.Content>
-          {categories.length === 0 ? (
+          {performance.length === 0 ? (
             <Text variant="bodyMedium" style={styles.empty}>
               No budget data in closed months yet.
             </Text>
           ) : (
-            categories.map((category) => {
-              const fraction =
-                category.plannedCents > 0
-                  ? category.spentCents / category.plannedCents
-                  : category.spentCents > 0
-                    ? 1
-                    : 0;
-              const over = category.spentCents > category.plannedCents;
+            performance.map((entry) => {
+              const average = entry.averagePercent;
+              if (average === null) {
+                return (
+                  <View key={entry.budgetId} style={styles.budgetRow}>
+                    <View style={styles.historyRow}>
+                      <Text variant="bodyMedium">{entry.name}</Text>
+                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                        No budget data
+                      </Text>
+                    </View>
+                  </View>
+                );
+              }
+              const over = average > 100;
               return (
-                <View key={category.budgetId} style={styles.budgetRow}>
+                <View key={entry.budgetId} style={styles.budgetRow}>
                   <View style={styles.historyRow}>
-                    <Text variant="bodyMedium">{category.name}</Text>
+                    <Text variant="bodyMedium">{entry.name}</Text>
                     <Text variant="bodySmall" style={{ color: over ? theme.semantic.overBudget : theme.colors.onSurfaceVariant }}>
-                      {formatCents(category.spentCents, symbol)} / {formatCents(category.plannedCents, symbol)}
+                      {`${average}% of plan / month`}
                     </Text>
                   </View>
                   <ProgressBar
-                    progress={Math.min(fraction, 1)}
+                    progress={Math.min(average / 100, 1)}
                     color={over ? theme.semantic.overBudget : undefined}
                     style={styles.progress}
                   />
@@ -174,6 +253,47 @@ const styles = StyleSheet.create({
   },
   card: {
     marginBottom: 12,
+  },
+  chartHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  medianBubble: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  legend: {
+    flexDirection: 'row',
+    gap: 16,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    flexWrap: 'wrap',
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  chartBody: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  chartEmpty: {
+    opacity: 0.6,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 16,
   },
   empty: {
     opacity: 0.6,

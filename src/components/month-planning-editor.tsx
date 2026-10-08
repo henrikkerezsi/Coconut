@@ -310,7 +310,7 @@ export function MonthPlanningEditor({
                   onChange={(next) =>
                     setPlans((current) => ({
                       ...current,
-                      [budget.budgetId]: Math.max(next ?? 0, 0),
+                      [budget.budgetId]: next ?? 0,
                     }))
                   }
                   prefix={symbol}

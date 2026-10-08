@@ -84,6 +84,11 @@ describe('deleteBudget', () => {
         'INSERT INTO transactions (month_key, date, amount_cents, budget_id, merchant) VALUES (?, ?, ?, ?, ?)'
       )
       .run(CURRENT_MONTH, '2026-09-10', 1200, budgetId, 'Shop');
+    raw
+      .prepare(
+        'INSERT INTO transactions (month_key, date, amount_cents, budget_id, merchant) VALUES (?, ?, ?, ?, ?)'
+      )
+      .run(PAST_MONTH, '2020-01-10', 900, budgetId, 'Shop');
 
     await deleteBudget(budgetId, makeDbApi(raw) as never);
 
@@ -94,10 +99,16 @@ describe('deleteBudget', () => {
       .prepare('SELECT month_key FROM month_budgets ORDER BY month_key')
       .all() as Array<{ month_key: string }>;
     expect(remaining).toEqual([{ month_key: PAST_MONTH }]);
-    expect(
-      (raw.prepare('SELECT COUNT(*) AS n FROM transactions WHERE budget_id = ?').get(budgetId) as { n: number })
-        .n
-    ).toBe(1);
+    // The current month's transactions are decoupled to "no budget" so closed
+    // month totals still add up; past months keep their spent-vs-plan record.
+    const attached = raw
+      .prepare('SELECT month_key FROM transactions WHERE budget_id = ?')
+      .all(budgetId) as Array<{ month_key: string }>;
+    expect(attached).toEqual([{ month_key: PAST_MONTH }]);
+    const decoupled = raw
+      .prepare('SELECT month_key FROM transactions WHERE month_key = ? AND budget_id IS NULL')
+      .all(CURRENT_MONTH) as Array<{ month_key: string }>;
+    expect(decoupled).toEqual([{ month_key: CURRENT_MONTH }]);
   });
 });
 

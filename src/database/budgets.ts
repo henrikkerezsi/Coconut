@@ -91,6 +91,13 @@ export async function deleteBudget(id: number, db?: SQLiteDatabase): Promise<voi
       'DELETE FROM month_budgets WHERE budget_id = ? AND month_key = ?',
       [id, currentMonthKey()]
     );
+    // Detach the current month's transactions from the deleted budget so their
+    // spending still lands in the month's "No budget" bucket when it closes.
+    // Past months keep their spent-vs-plan record intact.
+    await database.runAsync(
+      'UPDATE transactions SET budget_id = NULL WHERE budget_id = ? AND month_key = ?',
+      [id, currentMonthKey()]
+    );
     await database.runAsync('DELETE FROM budgets WHERE id = ?', [id]);
   });
 }

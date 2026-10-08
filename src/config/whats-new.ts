@@ -7,6 +7,35 @@ export interface WhatsNewEntry {
 
 export const whatsNew: WhatsNewEntry[] = [
   {
+    version: '1.1.1',
+    releasedAt: '2026-10-08T00:00:00.000Z',
+    intro:
+      'This release is about numbers you can trust at the end of the day. Entering amounts ' +
+      'in month planning stopped stumbling over itself, deleting a budget no longer leaves ' +
+      'its spending in a corner where nothing adds up, and the overview finally keeps its ' +
+      'projected month-end readable in dark mode. And statistics have been rebuilt around ' +
+      'what you actually want to know: your rhythm, your averages and how useful your ' +
+      'spending really was.',
+    features: [
+      'Entering amounts on the month-planning screen is fixed \u2014 the app no longer ' +
+        'latches onto half-finished numbers while you are still typing, and the amount ' +
+        'formats itself cleanly the moment you move on',
+      'Deleting a budget no longer strands its spending between buckets \u2014 the current ' +
+        'month\u2019s transactions are released to "no budget", so a closed month always adds ' +
+        'up again. Past months keep their records exactly as they were',
+      'The projected month-end on the overview is readable in dark mode again',
+      'A monthly spending chart now anchors the statistics page, with the median month ' +
+        'marked right on it \u2014 so one exceptional month can no longer masquerade as your ' +
+        'normal',
+      'Budget usage is now an average: every closed month compares what you spent against ' +
+        'what you planned, and each budget comes back as a single honest number',
+      'A spending quality chart shades every closed month into regret, neutral and good ' +
+        '\u2014 a picture of how useful your spending actually was',
+      'The savings reserve gets its own history too: a month-by-month chart of what you ' +
+        'added to it and what you drew from it',
+    ],
+  },
+  {
     version: '1.1.0',
     releasedAt: '2026-09-30T00:00:00.000Z',
     intro:

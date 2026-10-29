@@ -9,6 +9,7 @@ function month(monthKey: MonthKey, isClosed = false): Month {
     endingReserveCents: null,
     isClosed,
     closedAt: null,
+    closingVerdict: null,
   };
 }
 

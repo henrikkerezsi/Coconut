@@ -33,6 +33,7 @@ export interface Month {
   endingReserveCents: number | null;
   isClosed: boolean;
   closedAt: string | null;
+  closingVerdict: string | null;
 }
 
 export interface FixedExpense {

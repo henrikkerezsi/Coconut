@@ -10,11 +10,12 @@ import type { Month, MonthKey } from '../../src/models';
 function month(monthKey: MonthKey, isClosed = false): Month {
   return {
     monthKey,
-    allowanceCents: 50000,
+    allowanceCents: 0,
     startingReserveCents: 0,
-    endingReserveCents: isClosed ? 0 : null,
+    endingReserveCents: null,
     isClosed,
-    closedAt: isClosed ? '2026-10-01T00:00:00Z' : null,
+    closedAt: null,
+    closingVerdict: null,
   };
 }
 

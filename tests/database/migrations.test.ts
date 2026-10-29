@@ -1,7 +1,7 @@
 /// <reference types="node" />
 
 import { DatabaseSync } from 'node:sqlite';
-import { MIGRATIONS } from '../../src/database/migrations';
+import { MIGRATIONS, type Migration, type MigrationDatabase } from '../../src/database/migrations';
 
 function applyMigrations(db: DatabaseSync, fromId: number, toId: number): void {
   const pending = MIGRATIONS.filter((m) => m.id >= fromId && m.id <= toId).sort(

@@ -15,6 +15,7 @@ function toMonth(row: Record<string, unknown>): Month {
     endingReserveCents: row.ending_reserve_cents as number | null,
     isClosed: row.is_closed === 1,
     closedAt: row.closed_at as string | null,
+    closingVerdict: (row.closing_verdict as string | null) ?? null,
   };
 }
 

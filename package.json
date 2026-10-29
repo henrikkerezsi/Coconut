@@ -7,6 +7,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "export:web": "expo export --platform web",
+    "electron:build": "node scripts/build-electron.js",
     "reset-password": "node scripts/reset-password.mjs",
     "test": "jest",
     "typecheck": "tsc --noEmit",
@@ -39,6 +41,8 @@
     "@types/jest": "29.5.14",
     "@types/react": "~19.2.4",
     "@typescript-eslint/parser": "^8.70.0",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~57.0.2",
     "jest": "~29.7.0",
@@ -51,6 +55,32 @@
     "transformIgnorePatterns": [
       "node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-paper|react-native-safe-area-context))"
     ]
+  },
+  "build": {
+    "appId": "com.coconut.app",
+    "productName": "Coconut",
+    "includeSubNodeModules": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
+    "linux": {
+      "icon": "assets/icon.png",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        }
+      ],
+      "category": "Office"
+    }
   },
   "private": true
 }

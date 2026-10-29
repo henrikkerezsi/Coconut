@@ -1,9 +1,28 @@
 import { SCHEMA_SQL } from './schema';
 
+export interface MigrationDatabase {
+  getAllAsync<T>(source: string): Promise<T[]>;
+}
+
 export interface Migration {
   id: number;
   description: string;
   sql: string;
+  /**
+   * A migration whose effect may already be present: some earlier schema
+   * already created the column it adds. When this reports true the runner
+   * records the migration as applied instead of running it again.
+   */
+  isAlreadyApplied?: (db: MigrationDatabase) => Promise<boolean>;
+}
+
+async function hasColumn(
+  db: MigrationDatabase,
+  table: string,
+  column: string
+): Promise<boolean> {
+  const columns = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
+  return columns.some((entry) => entry.name === column);
 }
 
 export interface SubscriptionRepairColumns {
@@ -634,6 +653,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_month_budget_plan_events_uuid
   ON month_budget_plan_events (uuid);
 
 ${syncTriggersForTablesSql(['month_budget_plan_events'])}
+`,
+  },
+  {
+    id: 16,
+    description: 'Month closing verdict',
+    // A build of the 1.1.2 development line briefly put closing_verdict in the
+    // baseline schema, so a database created by it already has the column while
+    // still reporting user_version 15. Treat that as already applied instead of
+    // failing the whole migration with "duplicate column name".
+    isAlreadyApplied: (db) => hasColumn(db, 'months', 'closing_verdict'),
+    sql: `
+ALTER TABLE months ADD COLUMN closing_verdict TEXT;
 `,
   },
 ];

@@ -70,6 +70,7 @@ export interface MonthlyReport {
   initialDrawCents: number | null;
   /** The draw the month was left planning, or null when none was ever planned. */
   endingDrawCents: number | null;
+  closingVerdict: string | null;
 }
 
 /** What a month's plan record says about how its plan was arrived at. */
@@ -223,5 +224,6 @@ export function buildMonthlyReport(input: MonthlyReportInput): MonthlyReport {
     endingReserveCents: input.month.endingReserveCents,
     initialDrawCents: plan.initialDrawCents,
     endingDrawCents: plan.endingDrawCents,
+    closingVerdict: input.month.closingVerdict ?? null,
   };
 }

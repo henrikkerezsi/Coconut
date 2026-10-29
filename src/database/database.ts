@@ -38,6 +38,10 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
   );
   for (const migration of pending) {
     await db.withTransactionAsync(async () => {
+      if (migration.isAlreadyApplied && (await migration.isAlreadyApplied(db))) {
+        await db.execAsync(`PRAGMA user_version = ${migration.id}`);
+        return;
+      }
       await db.execAsync(migration.sql);
       await db.execAsync(`PRAGMA user_version = ${migration.id}`);
     });

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Appbar, Button, Card, List, Portal, Text } from 'react-native-paper';
+import { Appbar, Button, Card, List, Portal, Text, TextInput } from 'react-native-paper';
 import { useAppData, type MonthDashboard } from '../../data/DataProvider';
 import type { TransactionRating } from '../../models';
 import { monthLabel } from '../../utils/date';
@@ -37,6 +37,7 @@ export default function CloseMonthScreen() {
   const [confirm, setConfirm] = useState(false);
   const [closing, setClosing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [verdict, setVerdict] = useState('');
 
   const month = allMonths.find((entry) => entry.monthKey === monthKey) ?? null;
   const symbol = settings.currencySymbol;
@@ -233,6 +234,25 @@ export default function CloseMonthScreen() {
 
         <Card mode="elevated" style={styles.card}>
           <Card.Title
+            title="Month verdict"
+            subtitle="What went well, what was bad, why did the month spend the way it did?"
+          />
+          <Card.Content>
+            <TextInput
+              mode="outlined"
+              label="Verdict / notes"
+              value={verdict}
+              onChangeText={setVerdict}
+              multiline
+              numberOfLines={4}
+              placeholder="e.g. Overspent on groceries because of guests. Kept subscriptions in check. Should meal-plan next month."
+              style={styles.verdictInput}
+            />
+          </Card.Content>
+        </Card>
+
+        <Card mode="elevated" style={styles.card}>
+          <Card.Title
             title="How useful was your spending?"
             subtitle="Look back over the month and mark each purchase"
           />
@@ -311,7 +331,10 @@ export default function CloseMonthScreen() {
               onPress={async () => {
                 setClosing(true);
                 try {
-                  const closed = await closeCurrentMonth(month.monthKey);
+                  const closed = await closeCurrentMonth(
+                    month.monthKey,
+                    verdict.trim() === '' ? null : verdict.trim()
+                  );
                   setConfirm(false);
                   if (closed) {
                     setToast(`${monthLabel(month.monthKey)} closed`);
@@ -388,6 +411,9 @@ const styles = StyleSheet.create({
   empty: {
     opacity: 0.6,
     paddingVertical: 8,
+  },
+  verdictInput: {
+    marginTop: 4,
   },
   transactionRow: {
     flexDirection: 'row',

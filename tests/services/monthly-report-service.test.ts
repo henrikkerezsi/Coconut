@@ -107,6 +107,7 @@ function month(partial: Partial<Month> = {}): Month {
     endingReserveCents: null,
     isClosed: true,
     closedAt: '2026-10-01T00:00:00Z',
+    closingVerdict: null,
     ...partial,
   };
 }

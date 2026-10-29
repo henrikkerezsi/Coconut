@@ -29,6 +29,7 @@ interface MonthRow {
   ending_reserve_cents: number | null;
   is_closed: number;
   closed_at: string | null;
+  closing_verdict: string | null;
 }
 
 function rowToMonth(row: MonthRow): Month {
@@ -39,6 +40,7 @@ function rowToMonth(row: MonthRow): Month {
     endingReserveCents: row.ending_reserve_cents,
     isClosed: row.is_closed === 1,
     closedAt: row.closed_at,
+    closingVerdict: row.closing_verdict ?? null,
   };
 }
 
@@ -91,7 +93,7 @@ export async function getClosedMonths(db?: SQLiteDatabase): Promise<Month[]> {
 }
 
 export async function insertMonth(
-  month: Omit<Month, 'endingReserveCents' | 'isClosed' | 'closedAt'>,
+  month: Omit<Month, 'endingReserveCents' | 'isClosed' | 'closedAt' | 'closingVerdict'>,
   db?: SQLiteDatabase
 ): Promise<void> {
   const database = db ?? (await getDatabase());
@@ -296,13 +298,26 @@ export async function updateMonthStartingReserve(
 export async function closeMonth(
   monthKey: MonthKey,
   endingReserveCents: number,
-  db?: SQLiteDatabase
+  db?: SQLiteDatabase,
+  closingVerdict?: string | null
 ): Promise<boolean> {
   const database = db ?? (await getDatabase());
   const result = await database.runAsync(
-    `UPDATE months SET ending_reserve_cents = ?, is_closed = 1, closed_at = datetime('now')
+    `UPDATE months SET ending_reserve_cents = ?, is_closed = 1, closed_at = datetime('now'), closing_verdict = COALESCE(?, closing_verdict)
      WHERE month_key = ? AND is_closed = 0`,
-    [endingReserveCents, monthKey]
+    [endingReserveCents, closingVerdict ?? null, monthKey]
   );
   return result.changes > 0;
+}
+
+export async function saveMonthClosingVerdict(
+  monthKey: MonthKey,
+  closingVerdict: string | null,
+  db?: SQLiteDatabase
+): Promise<void> {
+  const database = db ?? (await getDatabase());
+  await database.runAsync('UPDATE months SET closing_verdict = ? WHERE month_key = ?', [
+    closingVerdict,
+    monthKey,
+  ]);
 }

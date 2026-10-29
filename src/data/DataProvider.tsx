@@ -185,7 +185,7 @@ interface AppData {
   saveSubscription: (id: number, input: SubscriptionInput) => Promise<void>;
   removeSubscription: (id: number) => Promise<void>;
   reorderSubscriptions: (orderedIds: number[]) => Promise<void>;
-  closeCurrentMonth: (monthKey: MonthKey) => Promise<boolean>;
+  closeCurrentMonth: (monthKey: MonthKey, closingVerdict?: string | null) => Promise<boolean>;
   /** Creates the pending month with the plan the user laid out for it. */
   startMonth: (input: PlannedMonthInput) => Promise<void>;
   /**
@@ -205,15 +205,21 @@ const DataContext = createContext<AppData | null>(null);
  * movement it applied. Returns false when the month was already closed, so the
  * reserve movement is never recorded twice.
  */
-async function settleMonth(monthKey: MonthKey, db: SQLiteDatabase): Promise<boolean> {
+async function settleMonth(
+  monthKey: MonthKey,
+  db: SQLiteDatabase,
+  closingVerdict?: string | null
+): Promise<boolean> {
   const dashboard = await buildDashboard(monthKey);
   if (!dashboard) {
     return false;
   }
-  const closed = await persistCloseMonth(
+  const { closeMonth: persistCloseMonthFn } = await import('../database/months');
+  const closed = await persistCloseMonthFn(
     monthKey,
     dashboard.reserveProjection.endingReserveCents,
-    db
+    db,
+    closingVerdict ?? null
   );
   if (!closed) {
     return false;
@@ -623,9 +629,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         await reorderSubscriptions(orderedIds, db);
         await refresh();
       },
-      closeCurrentMonth: async (monthKey) => {
+      closeCurrentMonth: async (monthKey, closingVerdict) => {
         const db = await getDatabase();
-        const closed = await settleMonth(monthKey, db);
+        const closed = await settleMonth(monthKey, db, closingVerdict ?? null);
         await refresh();
         return closed;
       },

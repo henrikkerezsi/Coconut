@@ -94,7 +94,7 @@ npx expo prebuild --platform android --no-install --clean
 # prebuild rewrites the npm scripts; we intentionally keep the original ones.
 git restore package.json
 
-echo "Building the release APK (this can take a while on the first run)..."
+ echo "Building the release APK (this can take a while on the first run)..."
 (cd android && ./gradlew assembleRelease --no-daemon)
 
 APK="android/app/build/outputs/apk/release/app-release.apk"
@@ -102,10 +102,29 @@ if [[ ! -f "$APK" ]]; then
   echo "Build finished but the APK was not found at $APK." >&2
   exit 1
 fi
-APK_RENAMED="android/app/build/outputs/apk/release/coconut.apk"
-mv $APK $APK_RENAMED
+mkdir -p build
+APK_RENAMED="build/coconut-${VERSION}.apk"
+cp "$APK" "$APK_RENAMED"
+# Keep a copy as coconut.apk for backwards compatibility
+cp "$APK" "build/coconut.apk"
 APK_SIZE="$(du -h "$APK_RENAMED" | cut -f1)"
 echo "APK ready: $APK_RENAMED ($APK_SIZE)"
+ echo "Building desktop (Electron) release for Linux..."
+npm run electron:build
+
+DESKTOP_FILES=()
+if [[ -d "release" ]]; then
+  mkdir -p build
+  for f in release/*.{AppImage,deb,rpm} release/*.zip; do
+    [[ -e "$f" ]] || continue
+    base="$(basename "$f")"
+    dest="build/coconut-${VERSION}-${base#Coconut-}"
+    # Normalize naming
+    cp "$f" "$dest" 2>/dev/null || cp "$f" "build/$(basename "$f")" 2>/dev/null || true
+    DESKTOP_FILES+=("$dest")
+  done
+  echo "Desktop artifacts copied to build/"
+fi
 
 REMOTE="$(git config --get remote.origin.url || true)"
 if [[ -n "$REMOTE" ]]; then
@@ -117,16 +136,29 @@ else
   GITHUB_RELEASES_URL="https://github.com/<owner>/<repo>/releases/new?tag=$TAG"
 fi
 
+ATTACH_FILES=("$APK_RENAMED" "build/coconut.apk")
+for df in "${DESKTOP_FILES[@]}"; do
+  [[ -f "$df" ]] && ATTACH_FILES+=("$df")
+done
+# Also attach any files directly in build/ that look like releases
+for f in build/*; do
+  [[ -f "$f" ]] && ATTACH_FILES+=("$f")
+done
+
 cat <<EOF
 
-================================================================================
-Release $TAG (build $VERSION_CODE) pushed and the APK is built locally.
 
-Next steps - attach the APK to a GitHub release:
-  1. Create the GitHub release with the APK attached:
+================================================================================
+Release $TAG (build $VERSION_CODE) pushed and builds are done locally.
+
+Android APK: $APK_RENAMED (also copied to build/coconut.apk)
+Desktop artifacts (if built): see build/ directory
+
+Next steps - attach artifacts to a GitHub release:
+  1. Create the GitHub release with artifacts attached:
        gh release create $TAG --title "Coconut $VERSION" \\
          --notes "Release notes for Coconut $VERSION" \\
-         "$APK"
+         ${ATTACH_FILES[*]}
 
   2. Or upload it manually in the browser:
        $GITHUB_RELEASES_URL

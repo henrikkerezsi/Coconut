@@ -37,6 +37,7 @@ function month(overrides: Partial<Month> = {}): Month {
     endingReserveCents: null,
     isClosed: false,
     closedAt: null,
+    closingVerdict: null,
     ...overrides,
   };
 }

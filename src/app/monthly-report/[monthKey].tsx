@@ -27,10 +27,12 @@ function ReportRow({
       ? theme.semantic.goodBudget
       : tone === 'bad'
         ? theme.semantic.overBudget
-        : undefined;
+        : theme.colors.onSurface;
   return (
     <View style={styles.row}>
-      <Text variant="bodyMedium">{label}</Text>
+      <Text variant="bodyMedium" style={{ color: theme.colors.onSurface }}>
+        {label}
+      </Text>
       <Text variant="bodyMedium" style={{ color }}>
         {value}
       </Text>
@@ -214,6 +216,17 @@ export default function MonthlyReportScreen() {
         </Card>
       )}
 
+      {report.closingVerdict ? (
+        <Card mode="elevated" style={styles.card} contentStyle={styles.cardContent}>
+          <Card.Title title="Month verdict" subtitle="Why it went the way it did" />
+          <Card.Content>
+            <Text variant="bodyMedium" style={styles.verdictText}>
+              {report.closingVerdict}
+            </Text>
+          </Card.Content>
+        </Card>
+      ) : null}
+
       <Card mode="elevated" style={styles.card} contentStyle={styles.cardContent}>
         <Card.Title title="Savings reserve" />
         <Card.Content>
@@ -273,5 +286,8 @@ const styles = StyleSheet.create({
   empty: {
     opacity: 0.6,
     paddingVertical: 8,
+  },
+  verdictText: {
+    lineHeight: 22,
   },
 });

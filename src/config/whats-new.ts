@@ -7,6 +7,26 @@ export interface WhatsNewEntry {
 
 export const whatsNew: WhatsNewEntry[] = [
   {
+    version: '1.2.0',
+    releasedAt: '2026-10-29T00:00:00.000Z',
+    intro:
+      'Coconut now has a desktop home. The same private, offline-first budget runs as a Linux ' +
+      'desktop app, and closing a month finally gives you somewhere to say how it really went. ' +
+      'A few small fixes keep startup and the month-end report in good shape along the way.',
+    features: [
+      'Coconut is now available for desktop as a Linux AppImage, with the same local-first setup ' +
+        'and the same no-account, no-network default as the Android app',
+      'Closing a month now includes a verdict and notes section \u2014 write down what went well, ' +
+        'what went badly and why the month spent the way it did',
+      'The month verdict is saved with the month and shown in its month-end report, so the story ' +
+        'behind the numbers stays with the numbers',
+      'Fixed the desktop app hanging on startup when its database and font assets were missing ' +
+        'from the packaged build',
+      'Fixed a database update error that could stop the app from loading after updating',
+      'Month-end report labels and neutral values now stay readable in dark mode',
+    ],
+  },
+  {
     version: '1.1.1',
     releasedAt: '2026-10-08T00:00:00.000Z',
     intro:

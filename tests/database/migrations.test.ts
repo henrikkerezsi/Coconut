@@ -276,6 +276,44 @@ describe('shared-space change-capture triggers (migration 10)', () => {
   });
 });
 
+describe('migration 16 (months.closing_verdict)', () => {
+  function migration16(): Migration {
+    const migration = MIGRATIONS.find((entry) => entry.id === 16);
+    if (!migration?.isAlreadyApplied) {
+      throw new Error('migration 16 must declare isAlreadyApplied');
+    }
+    return migration;
+  }
+
+  function adapter(db: DatabaseSync): MigrationDatabase {
+    return {
+      getAllAsync<T>(source: string): Promise<T[]> {
+        return Promise.resolve((db.prepare(source).all() as T[]) ?? []);
+      },
+    };
+  }
+
+  it('reports already applied when the column exists without version 16', async () => {
+    const db = new DatabaseSync(':memory:');
+    applyMigrations(db, 1, 15);
+    db.exec('ALTER TABLE months ADD COLUMN closing_verdict TEXT;');
+
+    const migration = migration16();
+    expect(await migration.isAlreadyApplied?.(adapter(db))).toBe(true);
+    expect(() => db.exec(migration.sql)).toThrow(/duplicate/i);
+  });
+
+  it('applies the column on a normal database and then reports applied', async () => {
+    const db = new DatabaseSync(':memory:');
+    applyMigrations(db, 1, 15);
+
+    const migration = migration16();
+    expect(await migration.isAlreadyApplied?.(adapter(db))).toBe(false);
+    expect(() => db.exec(migration.sql)).not.toThrow();
+    expect(await migration.isAlreadyApplied?.(adapter(db))).toBe(true);
+  });
+});
+
 describe('migration 11 and schema self-heal (sync_state.last_sync_error)', () => {
   function syncStateColumns(db: DatabaseSync): string[] {
     const cols = db.prepare('PRAGMA table_info(sync_state)').all() as Array<{ name: string }>;
